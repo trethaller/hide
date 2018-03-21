@@ -20,6 +20,7 @@
 	"key.delete" : "Delete",
 
 	"key.search" : "Ctrl-F",
+	"key.selectAll" : "Ctrl-A",
 
 	// cdb keys
 
