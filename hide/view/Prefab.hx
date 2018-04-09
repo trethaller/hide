@@ -228,7 +228,7 @@ class Prefab extends FileView {
 		function makeItem(o:PrefabElement) : hide.comp.IconTree.IconTreeItem<PrefabElement> {
 			var p = o.getHideProps();
 			return {
-				data : o,
+				value : o,
 				text : o.name,
 				icon : "fa fa-"+p.icon,
 				children : o.children.length > 0,
@@ -285,9 +285,19 @@ class Prefab extends FileView {
 							if( o == current ) {
 								properties.clear();
 								var index = roots.indexOf(o);
+								var contexts = context.shared.contexts;
+								var ctx = contexts.get(o);
+								contexts.remove(o);
 								roots.remove(o);
 								undo.change(Custom(function(undo) {
-									if( undo ) roots.insert(index, o) else roots.remove(o);
+									if( undo ) {
+										roots.insert(index, o);
+										contexts.set(o, ctx);
+									}
+									else {
+										roots.remove(o);
+										contexts.remove(o);										
+									}
 									refresh();
 								}));
 								refresh();

@@ -5,6 +5,11 @@ class Model extends Object3D {
 	var animation : Null<String>;
 	var lockAnimation : Bool = false;
 
+	public function new(?parent) {
+		super(parent);
+		type = "model";
+	}
+
 	override function save() {
 		var obj : Dynamic = super.save();
 		if( animation != null ) obj.animation = animation;
@@ -19,22 +24,22 @@ class Model extends Object3D {
 	}
 
 	override function makeInstance(ctx:Context):Context {
+		if( source == null)
+			return super.makeInstance(ctx);
 		ctx = ctx.clone(this);
-		if( source != null ) {
-			try {
-				var obj = ctx.loadModel(source);
-				obj.name = name;
-				applyPos(obj);
-				ctx.local3d.addChild(obj);
-				ctx.local3d = obj;
+		try {
+			var obj = ctx.loadModel(source);
+			obj.name = name;
+			applyPos(obj);
+			ctx.local3d.addChild(obj);
+			ctx.local3d = obj;
 
-				if( animation != null )
-					obj.playAnimation(ctx.loadAnimation(animation));
+			if( animation != null )
+				obj.playAnimation(ctx.loadAnimation(animation));
 
-				return ctx;
-			} catch( e : hxd.res.NotFound ) {
-				ctx.onError(e);
-			}
+			return ctx;
+		} catch( e : hxd.res.NotFound ) {
+			ctx.onError(e);
 		}
 		ctx.local3d = new h3d.scene.Object(ctx.local3d);
 		ctx.local3d.name = name;
@@ -48,11 +53,14 @@ class Model extends Object3D {
 		var props = ctx.properties.add(new hide.Element('
 			<div class="group" name="Animation">
 				<dl>
+					<dt>Model</dt><dd><input type="model" field="source"/></dd>
 					<dt>Animation</dt><dd><select><option value="">-- Choose --</option></select>
 					<dt title="Don\'t save animation changes">Lock</dt><dd><input type="checkbox" field="lockAnimation"></select>
 				</dl>
 			</div>
-		'),this);
+		'),this, function(pname) {
+			ctx.onChange(this, pname);
+		});
 
 		var select = props.find("select");
 		var anims = ctx.scene.listAnims(source);

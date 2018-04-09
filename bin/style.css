@@ -166,6 +166,9 @@ input[type=checkbox]:checked:after {
 .hide-scene-layer .jstree-container-ul {
   padding-right: 5px;
 }
+.hide-scene-tree {
+  min-height: 400px;
+}
 .hide-range {
   display: inline-block;
 }
@@ -210,8 +213,9 @@ input[type=checkbox]:checked:after {
 .hide-toolbar .toggle {
   margin-right: 5px;
   display: inline-block;
+  user-select: none;
   border: 1px solid #5a5a5a;
-  width: 20px;
+  min-width: 20px;
   height: 20px;
   padding: 2px;
   text-align: center;
@@ -231,6 +235,18 @@ input[type=checkbox]:checked:after {
   color: white;
   border-color: white;
   background-color: #666;
+}
+.hide-toolbar .button label,
+.hide-toolbar .toggle label {
+  font-size: 12px;
+  margin-left: 6px;
+  margin-right: 6px;
+  text-shadow: none;
+}
+.hide-toolbar .button label.locked,
+.hide-toolbar .toggle label.locked {
+  color: #000;
+  font-style: italic;
 }
 .hide-toolbar .toggle.toggled {
   color: #ddd;
@@ -298,6 +314,34 @@ input[type=checkbox]:checked:after {
 .hide-tabs > .tabs-header > div:hover {
   background-color: #282828;
 }
+.searchBox {
+  display: none;
+  width: 200px;
+  position: fixed;
+  top: 20px;
+  right: 0px;
+  background-color: black;
+  border: 1px solid #555;
+  border-top: none;
+  border-right: none;
+  border-bottom-left-radius: 5px;
+  padding: 5px;
+  color: #444;
+}
+.searchBox input {
+  width: 170px;
+  background-color: black;
+}
+.searchBox i {
+  cursor: pointer;
+  margin-left: 5px;
+  display: inline-block;
+  font-size: 18px;
+  color: #888;
+}
+.searchBox i:hover {
+  color: #EEE;
+}
 /* Properties */
 .hide-properties {
   flex: 0 0 300px;
@@ -353,6 +397,14 @@ input[type=checkbox]:checked:after {
 .hide-properties input[type=checkbox] {
   width: 13px;
 }
+.hide-properties dt input[type=button] {
+  width: 100%;
+  text-align: right;
+  background: none;
+  border: none;
+  zoom: 1;
+  font-size: 11px;
+}
 .hide-properties select {
   width: 197px;
 }
@@ -403,13 +455,56 @@ div.lm_close_tab:hover {
 .jstree {
   background: transparent !important;
 }
+.jstree .filtered {
+  display: none;
+}
 .jstree-icon.jstree-ocl {
   opacity: 0.7;
   width: 18px !important;
   top: -1px;
 }
-.jstree-icon {
-  color: #aaa !important;
+.jstree-icon i {
+  color: #aaa;
+}
+.jstree.small a {
+  font-size: 12px;
+}
+.jstree.small .jstree-node {
+  min-height: 18px;
+  line-height: 18px;
+  margin-left: 12px;
+  min-width: 18px;
+}
+.jstree.small .jstree-anchor {
+  line-height: 18px;
+  height: 18px;
+}
+.jstree.small .jstree-icon {
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+}
+.jstree.small .jstree-icon:empty {
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+}
+.jstree.small .jstree-wholerow {
+  height: 18px;
+}
+.jstree-invisible a {
+  color: #555 !important;
+  display: inline;
+}
+.jstree-invisible i {
+  color: #555;
+}
+a.jstree-locked {
+  color: #666 !important;
+  font-style: italic;
+}
+a.jstree-locked::after {
+  content: " (locked)";
 }
 /* Spectrum Color picker */
 div.sp-replacer {

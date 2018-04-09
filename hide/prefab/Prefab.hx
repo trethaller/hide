@@ -151,8 +151,29 @@ class Prefab {
 		return v;
 	}
 
+	public function getAll<T:Prefab>( cl : Class<T>, ?arr: Array<T> ) : Array<T> {
+		if(arr == null)
+			arr = [];
+		var i = Std.instance(this, cl);
+		if(i != null)
+			arr.push(i);
+		for(c in children) {
+			c.getAll(cl, arr);
+		}
+		return arr;
+	}
+
 	public function to<T:Prefab>( c : Class<T> ) : Null<T> {
 		return Std.instance(this, c);
 	}
 
+	public function getParent<T:Prefab>( c : Class<T> ) : Null<T> {
+		var p = parent;
+		while(p != null) {
+			var inst = Std.instance(p, c);
+			if(inst != null) return inst;
+			p = p.parent;
+		}
+		return null;
+	}
 }

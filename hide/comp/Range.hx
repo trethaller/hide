@@ -37,12 +37,15 @@ class Range extends Component {
 		curMin = originMin;
 		curMax = originMax;
 		current = Std.parseFloat(f.attr("value"));
-		if( current == null || Math.isNaN(current) ) current = 0;
+		if(current != null && !Math.isNaN(current))
+			original = current;
+		else
+			current = 0;
 
 		p.parent().prev("dt").contextmenu(function(e) {
 			e.preventDefault();
 			new ContextMenu([
-				{ label : "Reset", click : function() { inputView.val(""+original); inputView.change(); } },
+				{ label : "Reset", click : reset },
 				{ label : "Cancel", click : function() {} },
 			]);
 			return false;
@@ -50,40 +53,46 @@ class Range extends Component {
 
 		f.on("input", function(_) {
 			var v = Math.round(Std.parseFloat(f.val()) * 100 * scale) / 100;
-			inputView.val(v);
-			current = v * scale;
+			setInner(v);
+			inputView.val(current / scale);
+			f.val(current / scale);
 			onChange(true);
 		});
 		inputView.keyup(function(e) {
 			if( e.keyCode == 13 || e.keyCode == 27 ) {
 				inputView.blur();
-				inputView.val(current * scale);
+				inputView.val(current / scale);
 				return;
 			}
-			var v = Std.parseFloat(inputView.val()) / scale;
+			var v = Std.parseFloat(inputView.val()) * scale;
 			if( Math.isNaN(v) ) return;
 			setInner(v);
-			f.val(v);
+			f.val(v / scale);
 			onChange(false);
 		});
 
-		f.val(current);
-		inputView.val(current);
+		f.val(current / scale);
+		inputView.val(current / scale);
 
 		f.change(function(e) {
 			var v = Math.round(Std.parseFloat(f.val()) * 100 * scale) / 100;
-			setInner(v/scale);
-			inputView.val(v);
+			setInner(v);
+			inputView.val(current / scale);
 			onChange(false);
 		});
+	}
+
+	public function reset() {
+		value = original;
+		onChange(false);
 	}
 
 	function set_value(v) {
 		if( original == null ) original = v;
 		setInner(v);
 		current = v;
-		inputView.val(current * scale);
-		f.val(current);
+		inputView.val(current / scale);
+		f.val(current / scale);
 		return v;
 	}
 

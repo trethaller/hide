@@ -6,6 +6,7 @@ class Ide {
 	public var projectDir(get,never) : String;
 	public var resourceDir(get,never) : String;
 	public var initializing(default,null) : Bool;
+	public var appPath(get, never): String;
 
 	public var mouseX : Int = 0;
 	public var mouseY : Int = 0;
@@ -73,7 +74,8 @@ class Ide {
 					return;
 			window.close(true);
 		});
-
+		window.on('blur', hxd.Key.initialize);
+		
 		// handle commandline parameters
 		nw.App.on("open", function(cmd) {
 			~/"([^"]+)"/g.map(cmd, function(r) {
@@ -87,26 +89,87 @@ class Ide {
 		var body = window.window.document.body;
 		body.onfocus = function(_) haxe.Timer.delay(function() new Element(body).find("input[type=file]").change().remove(), 200);
 		body.ondragover = function(e:js.html.DragEvent) {
-			e.preventDefault();
+			syncMousePosition(e);
+			var view = getViewAt(mouseX, mouseY);
+			var items : Array<String> = [for(f in e.dataTransfer.files) Reflect.field(f, "path")];
+			if(view != null && view.onDrop(true, items)) {
+				e.preventDefault();
+				e.stopPropagation();
+			}
 			return false;
 		};
 		body.ondrop = function(e:js.html.DragEvent) {
-			for( f in e.dataTransfer.files )
-				openFile(Reflect.field(f,"path"));
-			e.preventDefault();
+			syncMousePosition(e);
+			var view = getViewAt(mouseX, mouseY);
+			var items : Array<String>  = [for(f in e.dataTransfer.files) Reflect.field(f, "path")];
+			if(view != null && view.onDrop(false, items)) {
+				e.preventDefault();
+				e.stopPropagation();
+			}
+			else {
+				for( f in e.dataTransfer.files )
+					openFile(Reflect.field(f,"path"));
+				e.preventDefault();
+			}
 			return false;
 		}
 
-		// dispatch global keys based on mouse position
-		new Element(body).keydown(function(e) {
-			for( v in views ) {
-				var c = v.root.offset();
-				if( mouseX >= c.left && mouseY >= c.top && mouseX <= c.left + v.root.outerWidth() && mouseY <= c.top + v.root.outerHeight() ) {
-					v.keys.processEvent(e);
-					break;
+		// Listen to FileTree dnd
+		new Element(window.window.document).on("dnd_stop.vakata.jstree", function(e, data) {
+			if(data.data.jstree != null) {
+				for( v in views ) {
+					var ft = Std.instance(v, hide.view.FileTree);
+					if(ft != null) @:privateAccess {
+						if(ft.tree.root[0] == data.data.origin.element[0]) {
+							var node = data.data.origin.get_node(data.element);
+							var item = ft.tree.map.get(node.id);
+							if(item != null) {
+								var path = item.value;
+								var view = getViewAt(mouseX, mouseY);
+								if(view != null) {
+									view.onDrop(false, [path]);
+								}
+							}
+							break;
+						}
+					}
 				}
 			}
 		});
+
+		// dispatch global keys based on mouse position
+		new Element(body).keydown(function(e) {
+			var view = getViewAt(mouseX, mouseY);
+			if(view != null) {
+				view.keys.processEvent(e);
+			}
+		});
+
+		var stage = new hxd.Stage(js.Browser.document.createCanvasElement(), true);
+		stage.setCurrent();
+		hxd.Key.initialize();
+	}
+
+	function getViewAt(x : Float, y : Float) {
+		for( v in views ) {
+			var c = v.root.offset();
+			if( x >= c.left && y >= c.top && x <= c.left + v.root.outerWidth() && y <= c.top + v.root.outerHeight() ) {
+				return v;
+			}
+		}
+		return null;
+	}
+
+	function syncMousePosition(e:js.html.MouseEvent) {
+		mouseX = e.clientX;
+		mouseY = e.clientY;
+		for( c in new Element("canvas") ) {
+			var s : hide.comp.Scene = (c:Dynamic).__scene;
+			if( s != null ) @:privateAccess {
+				s.stage.curMouseX = mouseX;
+				s.stage.curMouseY = mouseY;
+			}
+		}
 	}
 
 	function get_isWindows() {
@@ -214,6 +277,17 @@ class Ide {
 
 	function get_ideProps() return props.global.source.hide;
 	function get_currentProps() return props.user;
+	function get_appPath() {
+		var path = js.Node.process.argv[0].split("\\").join("/").split("/");
+		path.pop();
+		var hidePath = path.join("/");
+		if( !sys.FileSystem.exists(hidePath + "/package.json") ) {
+			var prevPath = new haxe.io.Path(hidePath).dir;
+			if( sys.FileSystem.exists(prevPath + "/hide.js") )
+				hidePath = prevPath;
+		}
+		return hidePath;
+	}
 
 	public function setClipboard( text : String ) {
 		nw.Clipboard.get().set(text, Text);
@@ -267,7 +341,7 @@ class Ide {
 		var localDir = sys.FileSystem.exists(resourceDir) ? resourceDir : projectDir;
 		hxd.res.Loader.currentInstance = new CustomLoader(new hxd.fs.LocalFileSystem(localDir));
 		renderers = [
-			new h3d.mat.MaterialSetup("Default"),
+			new hide.Renderer.MaterialSetup("Default"),
 		];
 		var path = getPath("Renderer.hx");
 		if( sys.FileSystem.exists(path) ) {

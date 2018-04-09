@@ -79,21 +79,14 @@ class Props {
 		}
 	}
 
-	public function get( key : String ) : Dynamic {
-		return Reflect.field(current,key);
+	public function get( key : String, ?defaultVal : Dynamic ) : Dynamic {
+		var val = Reflect.field(current,key);
+		if(val != null) return val;
+		return defaultVal; 
 	}
 
 	public static function loadForProject( projectPath : String, resourcePath : String ) {
-		var path = js.Node.process.argv[0].split("\\").join("/").split("/");
-		path.pop();
-		var hidePath = path.join("/");
-
-		// in dev mode
-		if( !sys.FileSystem.exists(hidePath + "/package.json") ) {
-			var prevPath = new haxe.io.Path(hidePath).dir;
-			if( sys.FileSystem.exists(prevPath + "/hide.js") )
-				hidePath = prevPath;
-		}
+		var hidePath = Ide.inst.appPath;
 
 		var defaults = new Props();
 		defaults.load(hidePath + "/defaultProps.json");
