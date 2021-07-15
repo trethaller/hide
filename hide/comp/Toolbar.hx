@@ -123,7 +123,7 @@ class Toolbar extends Component {
 			onSelect : function(_) {},
 		};
 		e.click(function(ev) if( ev.button == 0 ){
-			new hide.comp.ContextMenu(menuItems);
+			new hide.comp.ContextMenu(menuItems, e);
 		});
 		e.appendTo(element);
 		return tool;

@@ -16,16 +16,41 @@ typedef ContextMenuItem = {
 class ContextMenu {
 
 	static var MENUS : Array<nw.Menu>;
+	static var COUNT = 0;
 
-	public function new( config : Array<ContextMenuItem> ) {
-		MENUS = [];
-		var menu = makeMenu(config);
-		var ide = hide.Ide.inst;
-		// wait until mousedown to get correct mouse pos
-		haxe.Timer.delay(function() {
-			if( MENUS[0] == menu )
-				menu.popup(ide.mouseX, ide.mouseY);
-		},0);
+	public function new( config : Array<ContextMenuItem>, ?element: Element ) {
+		if(element != null) {
+			++COUNT;
+			var id = Std.string(COUNT);
+			element.attr("ctxmenu", id);
+			var args = {
+				selector: '[ctxmenu=${id}]',
+				trigger: 'none',
+				items: {
+					"edit": {name: "Edit", icon: "edit"},
+					"cut": {name: "Cut", icon: "cut"},
+				   	'copy': {name: "Copy", icon: "copy"},
+					"paste": {name: "Paste", icon: "paste"},
+					"delete": {name: "Delete", icon: "delete"},
+					"sep1": "---------",
+					"quit": {name: "Quit", icon: function(){
+						return 'context-menu-icon context-menu-icon-quit';
+					}}
+				}
+			}
+			untyped $.contextMenu(args);
+			untyped $(element).contextMenu();
+		}
+		else {
+			MENUS = [];
+			var menu = makeMenu(config);
+			var ide = hide.Ide.inst;
+			// wait until mousedown to get correct mouse pos
+			haxe.Timer.delay(function() {
+				if( MENUS[0] == menu )
+					menu.popup(ide.mouseX, ide.mouseY);
+			},0);
+		}
 	}
 
 	function makeMenu( config : Array<ContextMenuItem> ) {
