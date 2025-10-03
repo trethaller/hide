@@ -59,6 +59,7 @@ class ModalColumnForm extends Modal {
 				<option value="gradient">Gradient</option>
 				<option value="curve">Curve</option>
 				<option value="custom">Custom Type</option>
+				<option value="structref">Structure Reference</option>
 				<option value="guid">GUID</option>
 				</select>
 				</tr>
@@ -102,6 +103,11 @@ class ModalColumnForm extends Modal {
 					<td><select name="ctype"></select>
 				</tr>
 
+				<tr class="structref">
+					<td>Structure
+					<td><select name="stype"></select>
+				</tr>
+
 				<tr class="scope">
 					<td>Scope
 					<td>
@@ -128,6 +134,11 @@ class ModalColumnForm extends Modal {
 				<tr class="doc hide">
 					<td>&nbsp;
 					<td><label><input type="checkbox" name="copyPasteImmutable"/>&nbsp;Ignore copy paste</label>
+				</tr>
+
+				<tr class="doc hide">
+					<td>&nbsp;
+					<td><label><input type="checkbox" name="shared"/>&nbsp;Shared</label>
 				</tr>
 
 				<tr class="doc hide">
@@ -239,6 +250,18 @@ class ModalColumnForm extends Modal {
 		for( t in base.getCustomTypes() )
 			new Element("<option>").attr("value", "" + t.name).text(t.name).appendTo(ctypes);
 
+		var stypes = form.find("[name=stype]");
+		new Element("<option>").attr("value", "").text("--- Select ---").appendTo(stypes);
+		// Find all shared columns across all sheets
+		for( s in base.sheets ) {
+			for( c in s.columns ) {
+				if( c.shared == true && (c.type == TList || c.type == TProperties) ) {
+					var refString = s.name + "@" + c.name;
+					new Element("<option>").attr("value", refString).text(refString).appendTo(stypes);
+				}
+			}
+		}
+
 		var cforms = form.find("[name=formula]");
 		for( f in editor.formulas.getList(sheet) )
 			new Element("<option>").attr("value", f.name).text(f.name).appendTo(cforms);
@@ -266,6 +289,7 @@ class ModalColumnForm extends Modal {
 			form.find("[name=hidden]").prop("checked", column.kind == Hidden);
 			var p = Editor.getColumnProps(column);
 			form.find("[name=copyPasteImmutable]").prop( "checked", p.copyPasteImmutable );
+			form.find("[name=shared]").prop("checked", column.shared == true);
 			if( column.documentation != null ) {
 				form.find("[name=doc]").val(column.documentation);
 				form.find(".doc").removeClass("hide");
@@ -287,6 +311,10 @@ class ModalColumnForm extends Modal {
 				form.find("[name=defaultValue]").prop('checked', column.defaultValue );
 			default:
 				form.find("[name=defaultValue]").val( column.defaultValue );
+			}
+			// Handle structRef initialization
+			if( column.structRef != null ) {
+				form.find("[name=stype]").val(column.structRef);
 			}
 		} else {
 			form.addClass("create");
@@ -403,6 +431,34 @@ class ModalColumnForm extends Modal {
 				return null;
 			}
 			TCustom(t.name);
+		case "structref":
+			if( v.stype == null || v.stype == "" ) {
+				error("Structure reference not selected");
+				return null;
+			}
+			// For structRef, we use TList or TProperties based on the referenced column
+			var parts = v.stype.split("@");
+			if( parts.length != 2 ) {
+				error("Invalid structure reference format");
+				return null;
+			}
+			var refSheet = base.getSheet(parts[0]);
+			if( refSheet == null ) {
+				error("Referenced sheet not found");
+				return null;
+			}
+			var refCol = null;
+			for( c in refSheet.columns ) {
+				if( c.name == parts[1] ) {
+					refCol = c;
+					break;
+				}
+			}
+			if( refCol == null ) {
+				error("Referenced column not found");
+				return null;
+			}
+			refCol.type; // Use the same type as the referenced column
 		case "color":
 			TColor;
 		case "layer":
@@ -479,6 +535,12 @@ class ModalColumnForm extends Modal {
 		}
 		if( t == TId && v.scope != "" ) c.scope = Std.parseInt(v.scope);
 		if( v.doc != "" ) c.documentation = v.doc;
+		
+		// Handle structRef and shared fields
+		if( v.stype != null && v.stype != "" ) c.structRef = v.stype;
+		if( v.shared == "on" ) {
+			c.shared = true;
+		}
 
 		var hasProp = false;
 		for( f in Reflect.fields(props) )
