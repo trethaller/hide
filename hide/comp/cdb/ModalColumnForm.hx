@@ -281,7 +281,9 @@ class ModalColumnForm extends Modal {
 		if (editForm) {
 			form.addClass("edit");
 			form.find("[name=name]").val(column.name);
-			form.find("[name=type]").val(column.type.getName().substr(1).toLowerCase()).change();
+			// Set the type - if column has structRef, show as "structref", otherwise show actual type
+			var typeValue = column.structRef != null ? "structref" : column.type.getName().substr(1).toLowerCase();
+			form.find("[name=type]").val(typeValue).change();
 			form.find("[name=req]").prop("checked", !column.opt);
 			form.find("[name=display]").val(column.display == null ? "0" : Std.string(column.display));
 			form.find("[name=kind]").val(column.kind == null ? "" : ""+column.kind);
