@@ -304,6 +304,14 @@ class Table extends Component {
 				col.attr("title", c.documentation);
 				new Element('<i style="margin-left: 5px" class="ico ico-book"/>').appendTo(col);
 			}
+			if( c.shared ) {
+				new Element('<i style="margin-left: 5px" class="ico ico-share-alt" title="Shared column"/>').appendTo(col);
+				col.addClass("shared");
+			}
+			if( c.structRef != null ) {
+				new Element('<i style="margin-left: 5px" class="ico ico-reply" title="Referencing ${c.structRef}"/>').appendTo(col);
+				col.addClass("struct-ref");
+			}
 			if( c.type == TString ) {
 				var ico = switch(c.kind) {
 					case Localizable:
