@@ -49,6 +49,7 @@ class ModalColumnForm extends Modal {
 				<option value="ref">Reference</option>
 				<option value="list">List</option>
 				<option value="properties">Properties</option>
+				<option value="polymorph">Polymorph</option>
 				<option value="color">Color</option>
 				<option value="file">File</option>
 				<option value="image">Image</option>
@@ -465,6 +466,8 @@ class ModalColumnForm extends Modal {
 			TDynamic;
 		case "properties":
 			TProperties;
+		case "polymorph":
+			TPolymorph;
 		case "guid":
 			TGuid;
 		default:
