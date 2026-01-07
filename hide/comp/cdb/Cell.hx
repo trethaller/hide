@@ -57,7 +57,7 @@ class Cell {
 		refresh();
 
 		switch( column.type ) {
-		case TList, TProperties:
+		case TList, TProperties, TPolymorph:
 			elementHtml.addEventListener("click", function(e) {
 				if( e.shiftKey ) return;
 				e.stopPropagation();
@@ -457,7 +457,7 @@ class Cell {
 			if( out.length == 0 )
 				return val("");
 			return {str: out.join(", "), containsHtml: true};
-		case TProperties:
+		case TProperties | TPolymorph:
 			var ps = sheet.getSub(c);
 			var out = [];
 			scope.push({ s : sheet, obj : obj });
@@ -951,7 +951,7 @@ class Cell {
 		case TBool:
 			setValue( currentValue == false && column.opt && table.displayMode != Properties ? null : currentValue == null ? true : currentValue ? false : true );
 			closeEdit();
-		case TProperties, TList:
+		case TProperties, TPolymorph, TList:
 			open();
 		case TRef(name):
 			var sdat = editor.base.getSheet(name);
