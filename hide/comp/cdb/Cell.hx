@@ -461,11 +461,16 @@ class Cell {
 			var ps = sheet.getSub(c);
 			var out = [];
 			scope.push({ s : sheet, obj : obj });
-			for( c in ps.columns ) {
-				var pval = Reflect.field(v, c.name);
-				if( pval == null && c.opt ) continue;
-				if( !canViewSubColumn(ps, c) ) continue;
-				out.push('<div class="label">${c.name} : <div class="content">${valueHtml(c, pval, ps, v, scope).str}</div></div>');
+			for( pc in ps.columns ) {
+				var pval = Reflect.field(v, pc.name);
+				if( pval == null && pc.opt ) continue;
+				if( !canViewSubColumn(ps, pc) ) continue;
+				if(c.type == TPolymorph) {
+					out.push('<div class="content">${valueHtml(pc, pval, ps, v, scope).str}</div>');
+					break;
+				}
+				else
+					out.push('<div class="label">${pc.name} : <div class="content">${valueHtml(pc, pval, ps, v, scope).str}</div></div>');
 			}
 			scope.pop();
 			html(out.join(""));
