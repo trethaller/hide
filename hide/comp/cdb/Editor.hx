@@ -2381,7 +2381,10 @@ class Editor extends Component {
 		}
 
 		var hasLocText = false;
+		var checked : Map<cdb.Sheet, Bool> = new Map();
 		function checkRec(s:cdb.Sheet) {
+			if( checked.get(s) ) return;
+			checked.set(s, true);
 			for( c in s.columns ) {
 				switch( c.type ) {
 				case TList, TProperties, TPolymorph:
