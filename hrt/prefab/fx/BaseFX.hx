@@ -223,9 +223,9 @@ class BaseFXTools {
 					if(Std.isOfType(prop, Float) || Std.isOfType(prop, Int))
 						base = cast prop;
 					var curve = Curve.getCurve(basePrefab, v.name);
-					var val = Value.VConst(base);
+					var val = Evaluator.vVal(base);
 					if(curve != null)
-						val = Value.VMult(curve.makeVal(), VConst(base));
+						val = Evaluator.vMult(curve.makeVal(), val);
 					if(ret == null) ret = [];
 					ret.push({
 						idx: paramCount - 1,

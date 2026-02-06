@@ -24,7 +24,11 @@ class Evaluator {
 		if(b == VOne) return a;
 		switch a {
 			case VConst(va):
-				return VMult(a, b);
+				return switch b {
+					case VCurve(vb): return VCurveScale(vb, va);
+					case VConst(vb): return VConst(va * vb);
+					default: VMult(a, b);
+				}
 			case VCurve(ca):
 				return VMult(a, b);
 			case VRandomScale(ri,rscale):
@@ -54,6 +58,7 @@ class Evaluator {
 			case VConst(va):
 				switch b {
 					case VConst(vb): return VConst(va + vb);
+					case VRandomScale(ri, scale): return VAddRandomScale(ri, scale, va);
 					default:
 				}
 			default:
@@ -75,23 +80,20 @@ class Evaluator {
 		}
 	}
 
-	public function getFloat(pidx: Int=0, val: Value, time: Float) : Float {
-		if(val == null)
-			return 0.0;
-		switch(val) {
-			case VZero: return 0.0;
-			case VOne: return 1.0;
-			case VConst(v): return v;
+	function getFloatSlow(pidx: Int=0, val: Value, time: Float) : Float {
+		return switch(val) {
+			case VCurve(c):  c.getVal(time);
+			case VCurveScale(c, scale): c.getVal(time) * scale;
+			case VAddRandCurve(cst, ridx, rscale, c): (cst + getRandom(pidx, ridx) * rscale) * c.getVal(time);
 			case VBlend(a,b,v):
 				var blend = parameters[v] ?? 0.0;
-				return hxd.Math.lerp(getFloat(pidx, a, time), getFloat(pidx, b, time), blend);
-			case VCurve(c):  return c.getVal(time);
+				return hxd.Math.lerp(getFloatSlow(pidx, a, time), getFloatSlow(pidx, b, time), blend);
 			case VParamRemap(a, param):
 				var time = parameters[param] ?? 0.0;
-				return getFloat(pidx, a, time);
+				return getFloatSlow(pidx, a, time);
 			case VValueRemap(a, remap):
-				var time = getFloat(pidx, remap, time);
-				return getFloat(pidx, a, time);
+				var time = getFloatSlow(pidx, remap, time);
+				return getFloatSlow(pidx, a, time);
 			case VRandomBetweenCurves(ridx, c):
 				{
 					var c1 = Std.downcast(c.children[0], Curve);
@@ -107,18 +109,26 @@ class Evaluator {
 					return a + (b - a) * remappedRand;
 				}
 			case VRandom(ridx, scale):
-				return getRandom(pidx, ridx) * getFloat(pidx, scale, time);
-			case VRandomScale(ridx, scale):
-				return getRandom(pidx, ridx) * scale;
-			case VAddRandCurve(cst, ridx, rscale, c):
-				return (cst + getRandom(pidx, ridx) * rscale) * c.getVal(time);
+				return getRandom(pidx, ridx) * getFloatSlow(pidx, scale, time);
 			case VMult(a, b):
-				return getFloat(pidx, a, time) * getFloat(pidx, b, time);
+				return getFloatSlow(pidx, a, time) * getFloatSlow(pidx, b, time);
 			case VAdd(a, b):
-				return getFloat(pidx, a, time) + getFloat(pidx, b, time);
-			default: 0.0;
+				return getFloatSlow(pidx, a, time) + getFloatSlow(pidx, b, time);
+			default:
+				return getFloat(pidx, val, time);
 		}
-		return 0.0;
+	}
+
+	inline public function getFloat(pidx: Int=0, val: Value, time: Float) : Float {
+		return switch(val) {
+			case VZero: return 0.0;
+			case VOne: return 1.0;
+			case VConst(v): v;
+			case VRandomScale(ridx, scale): getRandom(pidx, ridx) * scale;
+			case VAddRandomScale(ridx, scale, add): getRandom(pidx, ridx) * scale + add;
+			default:
+				getFloatSlow(pidx, val, time);
+		}
 	}
 
 	public function getSum(val: Value, time: Float) : Float {
@@ -143,8 +153,6 @@ class Evaluator {
 
 	public function getVector(pidx: Int=0, v: Value, time: Float, vec: h3d.Vector4) {
 		switch(v) {
-			case VMult(a, b):
-				throw "need optimization";
 			case VVector(x, y, z, null):
 				vec.set(getFloat(pidx, x, time), getFloat(pidx, y, time), getFloat(pidx, z, time), 1.0);
 			case VVector(x, y, z, w):
