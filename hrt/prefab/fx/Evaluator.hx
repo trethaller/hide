@@ -10,60 +10,78 @@ class Evaluator {
 		this.stride = stride;
 	}
 
-	public static function vVal(f: Float) : Value {
-		return switch(f) {
-			case 0.0: VZero;
-			case 1.0: VOne;
-			default: VConst(f);
-		}
+
+	public static inline function vVal(v: Float) : Value {
+		return VConst(v);
 	}
 
-	public static function vMult(a: Value, b: Value) : Value {
-		if(a == VZero || b == VZero) return VZero;
-		if(a == VOne) return b;
-		if(b == VOne) return a;
-		switch a {
-			case VConst(va):
-				return switch b {
-					case VCurve(vb): return VCurveScale(vb, va);
-					case VConst(vb): return VConst(va * vb);
-					default: VMult(a, b);
-				}
-			case VCurve(ca):
-				return VMult(a, b);
-			case VRandomScale(ri,rscale):
-				switch b {
-					case VCurve(vb): return VAddRandCurve(0, ri, rscale, vb);
-					default:
-				}
-			case VAdd(va,VRandomScale(ri,rscale)):
-				var av = switch (va) {
-					case VConst(v): v;
-					case VOne: 1.0;
-					default: throw "Unsupported";
-				}
-				switch b {
-					case VCurve(vb): return VAddRandCurve(av, ri, rscale, vb);
-					default:
-				}
-			default:
+	public static function optimize(val: Value) : Value {
+		function opt(v: Value) : Value {
+			function tryBoth(a: Value, b: Value, fn: (Value, Value) -> Null<Value>) : Null<Value> {
+				var r = fn(a, b);
+				return r != null ? r : fn(b, a);
+			}
+			return switch(v) {
+				case VConst(c): c == 0.0 ? VZero : c == 1.0 ? VOne : v;
+				case VCurveScale(c, s): s == 0.0 ? VZero : s == 1.0 ? VCurve(c) : v;
+				case VRandomScale(_, s): s == 0.0 ? VZero : v;
+				case VAddRandomScale(_, s, add): s == 0.0 ? opt(VConst(add)) : v;
+				case VAddRandCurve(cst, _, rs, c): rs == 0.0 ? (cst == 0.0 ? VZero : cst == 1.0 ? VCurve(c) : VCurveScale(c, cst)) : v;
+				case VMult(a, b):
+					var a = opt(a), b = opt(b);
+					var r = tryBoth(a, b, (x, y) -> switch(x) {
+						case VZero: VZero;
+						case VOne: y;
+						case VConst(va): switch(y) {
+							case VConst(vb): VConst(va * vb);
+							case VCurve(c): VCurveScale(c, va);
+							case VCurveScale(c, s): VCurveScale(c, s * va);
+							case VRandomScale(ri, rs): VRandomScale(ri, rs * va);
+							case VAddRandomScale(ri, rs, add): VAddRandomScale(ri, rs * va, add * va);
+							default: null;
+						}
+						case VRandomScale(ri, rs): switch(y) {
+							case VCurve(c): VAddRandCurve(0, ri, rs, c);
+							default: null;
+						}
+						case VAddRandomScale(ri, rs, add): switch(y) {
+							case VCurve(c): VAddRandCurve(add, ri, rs, c);
+							default: null;
+						}
+						default: null;
+					});
+					r != null ? opt(r) : VMult(a, b);
+				case VAdd(a, b):
+					var a = opt(a), b = opt(b);
+					var r = tryBoth(a, b, (x, y) -> switch(x) {
+						case VZero: y;
+						case VOne: switch(y) {
+							case VConst(vb): VConst(1.0 + vb);
+							case VRandomScale(ri, rs): VAddRandomScale(ri, rs, 1.0);
+							case VAddRandomScale(ri, rs, add): VAddRandomScale(ri, rs, 1.0 + add);
+							default: null;
+						}
+						case VConst(va): switch(y) {
+							case VConst(vb): VConst(va + vb);
+							case VRandomScale(ri, rs): VAddRandomScale(ri, rs, va);
+							case VAddRandomScale(ri, rs, add): VAddRandomScale(ri, rs, va + add);
+							default: null;
+						}
+						default: null;
+					});
+					r != null ? opt(r) : VAdd(a, b);
+				case VVector(x, y, z, w): VVector(opt(x), opt(y), opt(z), w != null ? opt(w) : null);
+				case VHsl(h, s, l, a): VHsl(opt(h), opt(s), opt(l), opt(a));
+				case VBlend(a, b, p): VBlend(opt(a), opt(b), p);
+				case VParamRemap(a, p): VParamRemap(opt(a), p);
+				case VValueRemap(a, r): VValueRemap(opt(a), opt(r));
+				case VRandom(ri, s): VRandom(ri, opt(s));
+				case VBool(a): VBool(opt(a));
+				case VInt(a): VInt(opt(a));
+				default: v;
+			}
 		}
-		return VMult(a, b);
-	}
-
-	public static function vAdd(a: Value, b: Value) : Value {
-		if(a == VZero) return b;
-		if(b == VZero) return a;
-		switch a {
-			case VConst(va):
-				switch b {
-					case VConst(vb): return VConst(va + vb);
-					case VRandomScale(ri, scale): return VAddRandomScale(ri, scale, va);
-					default:
-				}
-			default:
-		}
-		return VAdd(a, b);
+		return opt(val);
 	}
 
 	inline function getRandom(pidx: Int, ridx: Int) {

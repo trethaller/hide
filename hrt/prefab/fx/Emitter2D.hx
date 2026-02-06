@@ -651,18 +651,13 @@ class Emitter2D extends Object2D {
 
 				var xCurve = getCurve(pname + suffix);
 				if (xCurve != null) {
-					if (xCurve.blendMode == CurveBlendMode.RandomBlend) {
+					if (xCurve.blendMode == CurveBlendMode.RandomBlend)
 						return VRandomBetweenCurves(randIdx++, xCurve);
-					}
-					else {
-						if (pname.indexOf("Rotation") >= 0 || pname.indexOf("Offset") >= 0)
-							return Evaluator.vAdd(Evaluator.vAdd(xVal, randVal), xCurve.makeVal());
-						else
-							return Evaluator.vMult(Evaluator.vAdd(xVal, randVal), xCurve.makeVal());
-					}
+					if (pname.indexOf("Rotation") >= 0 || pname.indexOf("Offset") >= 0)
+						return VAdd(VAdd(xVal, randVal), xCurve.makeVal());
+					return VMult(VAdd(xVal, randVal), xCurve.makeVal());
 				}
-				else
-					return Evaluator.vAdd(xVal, randVal);
+				return VAdd(xVal, randVal);
 			}
 
 			var baseProp: Dynamic = Reflect.field(props, name);
@@ -677,18 +672,9 @@ class Emitter2D extends Object2D {
 							randProp != null ? (randProp[idx] : Float) : null,
 							param.name, suffix);
 					}
-					var v : Value = VVector(
-						makeComp(0, ":x"),
-						makeComp(1, ":y"),
-						makeComp(2, ":z"));
-					if(v.match(VVector(VZero, VZero, VZero)))
-						v = VZero;
-					else if(v.match(VVector(VOne, VOne, VOne)))
-						v = VOne;
-					return v;
-
+					return Evaluator.optimize(VVector(makeComp(0, ":x"), makeComp(1, ":y"), makeComp(2, ":z")));
 				default:
-					return makeCompVal(baseProp, param.def != null ? param.def : 0.0, randProp, param.name, "");
+					return Evaluator.optimize(makeCompVal(baseProp, param.def != null ? param.def : 0.0, randProp, param.name, ""));
 			}
 		}
 

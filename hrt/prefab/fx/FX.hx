@@ -663,35 +663,28 @@ class FXAnimation extends h3d.scene.Object {
 
 		function makeVal(name, def) : Value {
 			var c = Curve.getCurve(elt, name);
-			if(c != null)
-				anyFound = true;
-
-			if (c == null)
+			if(c == null)
 				return def;
-			return c.makeVal();
+			anyFound = true;
+			return Evaluator.optimize(c.makeVal());
 		}
 
 		function makeVector(name: String, defVal: Float, uniform: Bool=true, scale: Float=1.0) : Value {
 			var curves = Curve.getCurves(elt, name);
 			if(curves == null || curves.length == 0)
 				return null;
-
 			anyFound = true;
-
-			if(uniform && curves.length == 1 && curves[0].name == name) {
-				return scale != 1.0 ? VMult(curves[0].makeVal(), VConst(scale)) : curves[0].makeVal();
-			}
-
-			return Curve.getVectorValue(curves, defVal, scale);
+			if(uniform && curves.length == 1 && curves[0].name == name)
+				return Evaluator.optimize(scale != 1.0 ? VMult(curves[0].makeVal(), VConst(scale)) : curves[0].makeVal());
+			return Evaluator.optimize(Curve.getVectorValue(curves, defVal, scale));
 		}
 
 		function makeColor(name: String) {
 			var curves = Curve.getCurves(elt, name);
 			if(curves == null || curves.length == 0)
 				return null;
-
 			anyFound = true;
-			return Curve.getColorValue(curves);
+			return Evaluator.optimize(Curve.getColorValue(curves));
 		}
 
 		var ap : AdditionalProperies = null;

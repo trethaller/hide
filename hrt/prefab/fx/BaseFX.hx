@@ -212,26 +212,15 @@ class BaseFXTools {
 					var isColor = v.name.toLowerCase().indexOf("color") >= 0;
 					var val = isColor ? Curve.getColorValue(curves) : Curve.getVectorValue(curves);
 					if(ret == null) ret = [];
-					ret.push({
-						idx: paramCount - 1,
-						def: v,
-						value: val,
-					});
-
+					ret.push({ idx: paramCount - 1, def: v, value: Evaluator.optimize(val) });
 				default:
 					var base = 1.0;
 					if(Std.isOfType(prop, Float) || Std.isOfType(prop, Int))
 						base = cast prop;
 					var curve = Curve.getCurve(basePrefab, v.name);
-					var val = Evaluator.vVal(base);
-					if(curve != null)
-						val = Evaluator.vMult(curve.makeVal(), val);
+					var val = curve != null ? Value.VMult(curve.makeVal(), Evaluator.vVal(base)) : Evaluator.vVal(base);
 					if(ret == null) ret = [];
-					ret.push({
-						idx: paramCount - 1,
-						def: v,
-						value: val,
-					});
+					ret.push({ idx: paramCount - 1, def: v, value: Evaluator.optimize(val) });
 			}
 		}
 
@@ -251,16 +240,10 @@ class BaseFXTools {
 			if(curves == null || curves.length == 0)
 				continue;
 
-			var base = 1.0;
 			var curve = Curve.getCurve(rfxElt, f.name);
-			var val = Value.VConst(base);
-			if(curve != null)
-				val = Value.VMult(curve.makeVal(), VConst(base));
+			var val = curve != null ? Value.VMult(curve.makeVal(), VConst(1.0)) : VConst(1.0);
 			if(ret == null) ret = [];
-			ret.push({
-				field : f,
-				value : val
-			});
+			ret.push({ field: f, value: Evaluator.optimize(val) });
 		}
 
 		return ret;
