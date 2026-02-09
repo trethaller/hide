@@ -1810,7 +1810,7 @@ class Emitter extends Object3D {
 			var baseProp: Dynamic = Reflect.field(props, name);
 			var randProp: Dynamic = Reflect.field(props, EmitterHelper.randProp(name));
 			var param = PARAMS.get(name);
-			switch(param.t) {
+			var v = switch(param.t) {
 				case PVec(_):
 					inline function makeComp(idx, suffix) {
 						return makeCompVal(
@@ -1819,10 +1819,15 @@ class Emitter extends Object3D {
 							randProp != null ? (randProp[idx] : Float) : null,
 							param.name, suffix);
 					}
-					return Evaluator.optimize(VVector(makeComp(0, ":x"), makeComp(1, ":y"), makeComp(2, ":z")));
+					VVector(
+						makeComp(0, ":x"),
+						makeComp(1, ":y"),
+						makeComp(2, ":z"));
+
 				default:
-					return Evaluator.optimize(makeCompVal(baseProp, param.def != null ? param.def : 0.0, randProp, param.name, ""));
+					makeCompVal(baseProp, param.def != null ? param.def : 0.0, randProp, param.name, "");
 			}
+			return Evaluator.optimize(v);
 		}
 
 		var d = new InstanceDef();

@@ -1,5 +1,6 @@
 package hrt.prefab.fx;
 
+// TODO: separate building values from compiled values
 enum Value {
 	VZero;
 	VOne;

@@ -212,15 +212,25 @@ class BaseFXTools {
 					var isColor = v.name.toLowerCase().indexOf("color") >= 0;
 					var val = isColor ? Curve.getColorValue(curves) : Curve.getVectorValue(curves);
 					if(ret == null) ret = [];
-					ret.push({ idx: paramCount - 1, def: v, value: Evaluator.optimize(val) });
+					ret.push({
+						idx: paramCount - 1,
+						def: v,
+						value: Evaluator.optimize(val)
+					});
 				default:
 					var base = 1.0;
 					if(Std.isOfType(prop, Float) || Std.isOfType(prop, Int))
 						base = cast prop;
 					var curve = Curve.getCurve(basePrefab, v.name);
-					var val = curve != null ? Value.VMult(curve.makeVal(), Evaluator.vVal(base)) : Evaluator.vVal(base);
+					var val = Value.VConst(base);
+					if(curve != null)
+						val = Value.VMult(curve.makeVal(), VConst(base));
 					if(ret == null) ret = [];
-					ret.push({ idx: paramCount - 1, def: v, value: Evaluator.optimize(val) });
+					ret.push({
+						idx: paramCount - 1,
+						def: v,
+						value: Evaluator.optimize(val),
+					});
 			}
 		}
 

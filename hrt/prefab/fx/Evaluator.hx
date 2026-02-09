@@ -21,12 +21,19 @@ class Evaluator {
 				var r = fn(a, b);
 				return r != null ? r : fn(b, a);
 			}
+			function optScale(base: Value, s: Float, ?def: Value) : Value {
+				if(s == 0.0)
+					return VZero;
+				if(s == 1.0)
+					return base;
+				return def != null ? def : v;
+			}
 			return switch(v) {
-				case VConst(c): c == 0.0 ? VZero : c == 1.0 ? VOne : v;
-				case VCurveScale(c, s): s == 0.0 ? VZero : s == 1.0 ? VCurve(c) : v;
-				case VRandomScale(_, s): s == 0.0 ? VZero : v;
-				case VAddRandomScale(_, s, add): s == 0.0 ? opt(VConst(add)) : v;
-				case VAddRandCurve(cst, _, rs, c): rs == 0.0 ? (cst == 0.0 ? VZero : cst == 1.0 ? VCurve(c) : VCurveScale(c, cst)) : v;
+				case VConst(c): optScale(VOne, c);
+				case VCurveScale(c, s): optScale(VCurve(c), s);
+				case VRandomScale(_, 0.0): VZero;
+				case VAddRandomScale(_, 0.0, add): opt(VConst(add));
+				// case VAddRandCurve(cst, _, 0.0, c): optScale(cst, VCurve(c), VCurveScale(c, cst));
 				case VMult(a, b):
 					var a = opt(a), b = opt(b);
 					var r = tryBoth(a, b, (x, y) -> switch(x) {
@@ -37,7 +44,6 @@ class Evaluator {
 							case VCurve(c): VCurveScale(c, va);
 							case VCurveScale(c, s): VCurveScale(c, s * va);
 							case VRandomScale(ri, rs): VRandomScale(ri, rs * va);
-							case VAddRandomScale(ri, rs, add): VAddRandomScale(ri, rs * va, add * va);
 							default: null;
 						}
 						case VRandomScale(ri, rs): switch(y) {
@@ -70,7 +76,17 @@ class Evaluator {
 						default: null;
 					});
 					r != null ? opt(r) : VAdd(a, b);
-				case VVector(x, y, z, w): VVector(opt(x), opt(y), opt(z), w != null ? opt(w) : null);
+				case VVector(x, y, z, w):
+					var ox = opt(x);
+					var oy = opt(y);
+					var oz = opt(z);
+					var ow = w != null ? opt(w) : null;
+					if(ox == VZero && oy == VZero && oz == VZero && (ow == null || ow == VZero))
+						VZero;
+					else if(ox == VOne && oy == VOne && oz == VOne && (ow == null || ow == VOne))
+						VOne;
+					else
+						VVector(ox, oy, oz, ow);
 				case VHsl(h, s, l, a): VHsl(opt(h), opt(s), opt(l), opt(a));
 				case VBlend(a, b, p): VBlend(opt(a), opt(b), p);
 				case VParamRemap(a, p): VParamRemap(opt(a), p);
