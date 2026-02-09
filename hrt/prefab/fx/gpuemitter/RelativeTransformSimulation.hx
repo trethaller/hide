@@ -154,10 +154,10 @@ class RelativeTransformSimulation extends SimulationShader {
 			for ( index => name in curveNames ) {
 				if ( c.name != name )
 					continue;
-				var c = c.makeVal();
+				var v = Evaluator.optimize(c.makeVal());
 				s.CURVE_MASK = s.CURVE_MASK | (1 << index);
 				for ( i in 0...width )
-					pixels.setPixelF(i, index, new h3d.Vector4(evaluator.getFloat(c, (i / width))));
+					pixels.setPixelF(i, index, new h3d.Vector4(evaluator.getFloat(v, (i / width))));
 			}
 		}
 
