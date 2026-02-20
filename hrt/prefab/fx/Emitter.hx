@@ -1775,7 +1775,7 @@ class Emitter extends Object3D {
 			return;
 		}
 
-		var randIdx = 0;
+		var randIdx = {v: 0};
 		var template : Object3D = cast children.find(
 			c -> EmitterObject.checkEnabled(c) &&
 			(c.name == null || c.name.indexOf("collision") == -1) &&
@@ -1784,50 +1784,8 @@ class Emitter extends Object3D {
 			c.to(Emitter) == null &&
 			c.to(hrt.prefab.l3d.Trails) == null);
 
-		function makeParam(scope: Prefab, name: String): Value {
-			var getCurve = hrt.prefab.Curve.getCurve.bind(scope);
-
-			function makeCompVal(baseProp: Null<Float>, defVal: Float, randProp: Null<Float>, pname: String, suffix: String) : Value {
-				var xVal = Evaluator.vVal(baseProp != null ? baseProp : defVal);
-				var randCurve = getCurve(pname + suffix + ":rand");
-				var randVal : Value = VZero;
-				if(randCurve != null)
-					randVal = VRandom(randIdx++, VMult(randCurve.makeVal(), VConst(randProp != null ? randProp : 1.0)));
-				else if(randProp != null && randProp != 0.0)
-					randVal = VRandomScale(randIdx++, randProp);
-
-				var xCurve = getCurve(pname + suffix);
-				if (xCurve != null) {
-					if (xCurve.blendMode == CurveBlendMode.RandomBlend)
-						return VRandomBetweenCurves(randIdx++, xCurve);
-					if (pname.indexOf("Rotation") >= 0 || pname.indexOf("Offset") >= 0)
-						return VAdd(VAdd(xVal, randVal), xCurve.makeVal());
-					return VMult(VAdd(xVal, randVal), xCurve.makeVal());
-				}
-				return VAdd(xVal, randVal);
-			}
-
-			var baseProp: Dynamic = Reflect.field(props, name);
-			var randProp: Dynamic = Reflect.field(props, EmitterHelper.randProp(name));
-			var param = PARAMS.get(name);
-			var v = switch(param.t) {
-				case PVec(_):
-					inline function makeComp(idx, suffix) {
-						return makeCompVal(
-							baseProp != null ? (baseProp[idx] : Float) : null,
-							param.def != null ? param.def[idx] : 0.0,
-							randProp != null ? (randProp[idx] : Float) : null,
-							param.name, suffix);
-					}
-					VVector(
-						makeComp(0, ":x"),
-						makeComp(1, ":y"),
-						makeComp(2, ":z"));
-
-				default:
-					makeCompVal(baseProp, param.def != null ? param.def : 0.0, randProp, param.name, "");
-			}
-			return Evaluator.optimize(v);
+		inline function makeParam(scope: Prefab, name: String): Value {
+			return EmitterHelper.makeParam(scope, name, PARAMS, props, randIdx);
 		}
 
 		var d = new InstanceDef();
@@ -1926,7 +1884,7 @@ class Emitter extends Object3D {
 			emitterObj.startTime = @:privateAccess scene.renderer.ctx.time;
 		#end
 
-		emitterObj.init(randIdx, this);
+		emitterObj.init(randIdx.v, this);
 
 		#if editor
 		if(propName == null || ["emitShape", "emitAngle", "emitRad1", "emitRad2"].indexOf(propName) >= 0)

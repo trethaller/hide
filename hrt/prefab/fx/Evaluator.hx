@@ -11,10 +11,6 @@ class Evaluator {
 	}
 
 
-	public static inline function vVal(v: Float) : Value {
-		return VConst(v);
-	}
-
 	public static function optimize(val: Value) : Value {
 		function opt(v: Value) : Value {
 			function tryBoth(a: Value, b: Value, fn: (Value, Value) -> Null<Value>) : Null<Value> {
@@ -170,6 +166,7 @@ class Evaluator {
 			case VOne: return time;
 			case VConst(v): return v * time;
 			case VCurve(c): return c.getSum(time);
+			case VCurveScale(c, scale): return c.getSum(time) * scale;
 			case VAdd(a, b):
 				return getSum(a, time) + getSum(b, time);
 			case VParamRemap(a, param):

@@ -1,6 +1,8 @@
 package hrt.prefab.fx;
 
 import hrt.prefab.Curve;
+import hrt.prefab.fx.Value;
+import hrt.prefab.fx.Evaluator;
 
 typedef ParamDef = {
 	> hrt.prefab.Props.PropDef,
@@ -45,6 +47,52 @@ class EmitterHelper {
 		if(isVector)
 			return h3d.Vector.fromArray(val);
 		return val;
+	}
+
+	public static function makeParam(scope: Prefab, name: String, params: Map<String, ParamDef>, props: Dynamic, randIdx: {v: Int}): Value {
+		var getCurve = hrt.prefab.Curve.getCurve.bind(scope);
+
+		function makeCompVal(baseProp: Null<Float>, defVal: Float, randProp: Null<Float>, pname: String, suffix: String): Value {
+			var xVal = Value.VConst(baseProp != null ? baseProp : defVal);
+			var randCurve = getCurve(pname + suffix + ":rand");
+			var randVal: Value = VZero;
+			if (randCurve != null)
+				randVal = VRandom(randIdx.v++, VMult(randCurve.makeVal(), VConst(randProp != null ? randProp : 1.0)));
+			else if (randProp != null && randProp != 0.0)
+				randVal = VRandomScale(randIdx.v++, randProp);
+
+			var xCurve = getCurve(pname + suffix);
+			if (xCurve != null) {
+				if (xCurve.blendMode == CurveBlendMode.RandomBlend)
+					return VRandomBetweenCurves(randIdx.v++, xCurve);
+				if (pname.indexOf("Rotation") >= 0 || pname.indexOf("Offset") >= 0)
+					return VAdd(VAdd(xVal, randVal), xCurve.makeVal());
+				return VMult(VAdd(xVal, randVal), xCurve.makeVal());
+			}
+			return VAdd(xVal, randVal);
+		}
+
+		var baseProp: Dynamic = Reflect.field(props, name);
+		var randProp: Dynamic = Reflect.field(props, EmitterHelper.randProp(name));
+		var param = params.get(name);
+		var v = switch (param.t) {
+			case PVec(_):
+				inline function makeComp(idx, suffix) {
+					return makeCompVal(
+						baseProp != null ? (baseProp[idx] : Float) : null,
+						param.def != null ? param.def[idx] : 0.0,
+						randProp != null ? (randProp[idx] : Float) : null,
+						param.name, suffix);
+				}
+				VVector(
+					makeComp(0, ":x"),
+					makeComp(1, ":y"),
+					makeComp(2, ":z"));
+
+			default:
+				makeCompVal(baseProp, param.def != null ? param.def : 0.0, randProp, param.name, "");
+		}
+		return Evaluator.optimize(v);
 	}
 
 	#if editor
