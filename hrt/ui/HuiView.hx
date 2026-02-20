@@ -5,9 +5,11 @@ package hrt.ui;
 class HuiView<T> extends HuiElement {
 	var state : T;
 
-	function new(?parent: h2d.Object) {
+	function new(state: Dynamic, ?parent: h2d.Object) {
 		super(parent);
 		initComponent();
+
+		this.state = cast state ?? {};
 	}
 
 	/**
@@ -42,6 +44,15 @@ class HuiView<T> extends HuiElement {
 	public static function register(name: String, cl: Class<HuiView<Dynamic>>) : Bool {
 		REGISTRY.set(name, cl);
 		return true;
+	}
+
+	public function getTypeName() {
+		var cl = Type.getClass(this);
+		for (name => otherCl in REGISTRY) {
+			if (otherCl == cl)
+				return name;
+		}
+		throw "unregistred view " + cl;
 	}
 }
 

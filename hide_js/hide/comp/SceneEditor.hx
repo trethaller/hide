@@ -2982,6 +2982,9 @@ class SceneEditor {
 			if(list != null) {
 				var m = [for(i in (list:Array<Dynamic>)) i => true];
 				for(p in all) {
+					// Prevent root from being hidden sometimes
+					if (p == sceneData)
+						continue;
 					if(m.exists(p.getAbsPath(true, true)))
 						hideList.set(p, true);
 				}
@@ -3554,7 +3557,7 @@ class SceneEditor {
 
 	function moveGizmoToSelection() {
 		// Snap Gizmo at center of objects
-		gizmo.getRotationQuat().identity();
+		gizmo.setRotation(0,0,0);
 		var roots = getRootObjects3d();
 		if(roots.length > 0) {
 			var pos = getPivot(roots);
@@ -5306,7 +5309,8 @@ class SceneEditor {
 		endRebuild();
 
 		if (doRefresh) {
-			refreshTree(SceneTree, () -> selectElements([], NoHistory));
+			selectElements([], NoHistory);
+			refreshTree(SceneTree);
 		}
 
 		if (enableUndo) {
@@ -5321,7 +5325,12 @@ class SceneEditor {
 					for(e in elts) rebuild(e);
 				endRebuild();
 				if (doRefresh) {
-					refreshTree(SceneTree, () -> selectElements(undo ? elts : [], NoHistory));
+					if (undo) {
+						refreshTree(SceneTree, () -> selectElements(elts, NoHistory));
+					} else {
+						selectElements([], NoHistory);
+						refreshTree(SceneTree);
+					}
 				}
 			}));
 		}

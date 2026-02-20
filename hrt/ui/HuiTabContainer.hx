@@ -27,7 +27,7 @@ class HuiTabContainer extends HuiElement {
 		content.onChildrenChanged = () -> syncTabsQueued = true;
 	}
 
-	function setTab(newElement: HuiElement) {
+	public function setTab(newElement: HuiElement) {
 		if (newElement != null && content.children.indexOf(newElement) < 0)
 			throw "element must be a child of content";
 
@@ -67,6 +67,14 @@ class HuiTabContainer extends HuiElement {
 
 	var syncTabsQueued = false;
 
+
+	function makeTab(forElement: HuiElement) : HuiTab {
+		var tab = new HuiTab(forElement, tabBarContent);
+		tab.onClick = (e) -> setTab(tab.targetElement);
+		tab.title.text = forElement.getDisplayName();
+		return tab;
+	}
+
 	function syncTabs() {
 		syncTabsQueued = false;
 
@@ -81,9 +89,7 @@ class HuiTabContainer extends HuiElement {
 		for (element in elements) {
 			var tab = currentTabs.find((t) -> t.targetElement == element);
 			if (tab == null) {
-				tab = new HuiTab(element, tabBarContent);
-				tab.onClick = (e) -> setTab(tab.targetElement);
-				tab.title.text = element.getDisplayName();
+				tab = makeTab(element);
 			} else {
 				oldTabs.remove(cast tab);
 			}
@@ -111,7 +117,6 @@ class HuiTabContainer extends HuiElement {
 
 			cumulativeWidth += tab.calculatedWidth;
 			tab.visible = cumulativeWidth < tabBarContent.calculatedWidth;
-			trace(tab.visible, tabBarContent.calculatedWidth);
 		}
 
 		var invisibles : Array<HuiTab> = cast currentTabs.filter((e) -> !e.visible);
@@ -134,6 +139,18 @@ class HuiTabContainer extends HuiElement {
 		for (element in elements) {
 			element.visible = element == activeTabElement;
 		}
+	}
+
+	public function addTab(tab: HuiElement) {
+		content.addChild(tab);
+	}
+
+	public function removeTab(tab: HuiElement) {
+		content.removeChild(tab);
+	}
+
+	public function getTabs() : Array<HuiElement> {
+		return content.childElements;
 	}
 
 	function syncActiveTabStyle() {

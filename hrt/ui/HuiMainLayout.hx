@@ -7,7 +7,7 @@ class HuiMainLayout extends HuiElement {
 	static var SRC =
 		<hui-main-layout>
 			<hui-element public id="main-navbar">
-				<hui-button-menu(() -> [{label: "Open Project ..."}, {label: "Recent", menu: [{label: "Wartales"}, {label: "Mog"}, {label: "Northgard 2"}, {label: "Spacecraft"}, {label: "D4X2"}]}])>
+				<hui-button-menu(fileMenu)>
 					<hui-text("File")/>
 				</hui-button-menu>
 				<hui-button-menu(() -> [{label: "Copy"}, {label: "Paste"}, {label: "Cut"}, {isSeparator: true}, {label: "Other stuff", menu: [{label: "Hello there"}]}])>
@@ -18,23 +18,18 @@ class HuiMainLayout extends HuiElement {
 				</hui-button-menu>
 			</hui-element>
 
-			<hui-split-container id="app-panel-internal" direction={hrt.ui.HuiSplitContainer.Direction.Horizontal} save-display-key="left-panel-split">
-				<hui-element public id="left-panel" class="panel">
-				</hui-element>
+			<hui-element public id="main-panel">
 
-
-				<hui-split-container id="right-panel-internal" direction={hrt.ui.HuiSplitContainer.Direction.Vertical} anchor-to={hrt.ui.HuiSplitContainer.AnchorTo.End} save-display-key="bottom-panel-split">
-					<hui-tab-view-container public id="main-panel"/>
-
-					<hui-element public id="bottom-panel" class="panel">
-					</hui-element>
-				</hui-split-container>
-			</hui-split-container>
+			</hui-element>
 
 			<hui-element public id="main-footer">
 				<hui-text("hide_hl v0.0.0")/>
+
+				<hui-text("fps") id="fps"/>
 			</hui-element>
 		</hui-main-layout>
+
+	public var projectLayout : HuiProjectLayout;
 
 	public function new(?parent: h2d.Object) {
 		super(parent);
@@ -45,10 +40,58 @@ class HuiMainLayout extends HuiElement {
 		initComponent();
 	}
 
+	function fileMenu() : Array<HuiMenu.MenuItem> {
+		return [
+			{label: "Open Project ...", click: () -> hide.Ide.inst.chooseProject()},
+			{label: "Recent", menu: recentMenu(), enabled: hide.Ide.inst.ideConfig.recentProjects.length > 0}
+		];
+	}
+
+	function recentMenu() : Array<HuiMenu.MenuItem> {
+		return [
+			for (project in hide.Ide.inst.ideConfig.recentProjects) {
+				label: project,
+				click: @:privateAccess hide.Ide.inst.setProject.bind(project),
+			}
+		];
+	}
+
+	var maxFrameTime = 0.0;
+	var lastmaxFrameTimeTime = 0.0;
+	var smoothedTime = 0.0;
+
+	override function sync(ctx) : Void {
+		super.sync(ctx);
+
+		var frameTime = hxd.Timer.elapsedTime;
+		var time = haxe.Timer.stamp();
+		if (frameTime > maxFrameTime || time - lastmaxFrameTimeTime > 1.0) {
+			maxFrameTime = frameTime;
+			lastmaxFrameTimeTime = time;
+		}
+
+		smoothedTime = hxd.Math.lerp(smoothedTime, frameTime, 0.02);
+
+		function fmt(f: Float) : String {
+			var str = '${hxd.Math.floor(f * 10000.0) / 10}';
+			if (str.indexOf(".") == -1) {
+				str += ".0";
+			}
+			return str + "ms";
+		}
+
+		fps.text = 'frame: ${fmt(smoothedTime)}, max: ${fmt(maxFrameTime)}';
+	}
+
 	function rebuild() {
 		removeChildren();
 		@:privateAccess dom.contentRoot = this;
 		init();
+	}
+
+	public function onSetProject() {
+		mainPanel.removeChildElements();
+		projectLayout = new HuiProjectLayout(mainPanel);
 	}
 }
 

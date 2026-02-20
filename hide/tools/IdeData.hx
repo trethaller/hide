@@ -70,7 +70,7 @@ class IdeData {
 	function setProject( dir : String ) {
 		fileWatcher.dispose();
 		dbWatcher = null;
-		if( dir != ideConfig.currentProject ) {
+		if(dir != ideConfig.currentProject ) {
 			ideConfig.currentProject = dir;
 			ideConfig.recentProjects.remove(dir);
 			ideConfig.recentProjects.unshift(dir);
@@ -78,7 +78,7 @@ class IdeData {
 			config.global.save();
 		}
 		config = Config.loadForProject(projectDir, resourceDir, getAppDataPath());
-		databaseFile = config.project.get("cdb.databaseFile");
+		databaseFile = config.project.get("cdb.databaseFile") ?? "data.cdb";
 		databaseDiff = config.user.get("cdb.databaseDiff");
 
 		var pak = config.project.get("pak.dataFile");
