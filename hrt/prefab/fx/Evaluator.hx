@@ -93,7 +93,10 @@ class Evaluator {
 				default: v;
 			}
 		}
-		return opt(val);
+
+		var r = opt(val);
+		addStat(val, r);
+		return r;
 	}
 
 	inline function getRandom(pidx: Int, ridx: Int) {
@@ -223,5 +226,82 @@ class Evaluator {
 				vec.set(f, f);
 		}
 		return vec;
+	}
+
+
+	static var stats : {
+		source: Map<String, Int>,
+		opt: Map<String, Int>,
+	}
+
+	public static function beginStats() {
+		stats = {
+			source: new Map(),
+			opt: new Map(),
+		}
+	}
+
+	public static function endStats(path: String) {
+		var sb = new StringBuf();
+
+		function printStats(map: Map<String, Int>) {
+			var sorted = [for(k => v in map) { k: k, v: v }];
+			sorted.sort((a, b) -> b.v - a.v);
+			for(item in sorted) {
+				sb.add('\t${item.k}: ${item.v}\n');
+			}
+			sb.add('\n');
+		}
+		sb.add('Source values:\n');
+		printStats(stats.source);
+		sb.add('Optimized values:\n');
+		printStats(stats.opt);
+		sys.io.File.saveContent(path, sb.toString());
+		stats = null;
+	}
+
+	static function addStat(source: Value, opt: Value) {
+		if(stats == null)
+			return;
+		function rec(v: Value) {
+			return switch v {
+				case VZero: "VZero";
+				case VOne: "VOne";
+				case VConst(v): "VConst";
+				case VCurve(c): "VCurve";
+				case VCurveScale(c, scale): "VCurveScale";
+				case VBlend(a, b, blendVar): 'VBlend(${rec(a)}, ${rec(b)})';
+				case VParamRemap(a, param): 'VParamRemap(${rec(a)})';
+				case VValueRemap(v, remap): 'VValueRemap(${rec(v)}, ${rec(remap)})';
+				case VRandomBetweenCurves(idx, c): 'VRandomBetweenCurves';
+				case VRandom(idx, scale): 'VRandom(${rec(scale)})';
+				case VRandomScale(idx, scale): 'VRandomScale';
+				case VAddRandomScale(idx, scale, add): 'VAddRandomScale';
+				case VAddRandCurve(cst, ridx, rscale, c): 'VAddRandCurve';
+				case VAdd(a, b): 'VAdd(${rec(a)}, ${rec(b)})';
+				case VMult(a, b): 'VMult(${rec(a)}, ${rec(b)})';
+				case VVector(x, y, z, w): 'VVector(${rec(x)}, ${rec(y)}, ${rec(z)}, ${rec(w)})';
+				case VHsl(h, s, l, a): 'VHsl(${rec(h)}, ${rec(s)}, ${rec(l)}, ${rec(a)})';
+				case VBool(v): 'VBool(${rec(v)})';
+				case VInt(v): 'VInt(${rec(v)})';
+			}
+		}
+
+		function register(v: Value, map: Map<String, Int>) {
+			function add(v: Value) {
+				var str = rec(v);
+				map.set(str, (map.get(str) ?? 0) + 1);
+			}
+			switch(v) {
+				// Unpack root vectors for clarity
+				case VVector(x, y, z, w):
+					add(x); add(y); add(z); add(w);
+				default:
+					add(v);
+			}
+		}
+
+		register(source, stats.source);
+		register(opt, stats.opt);
 	}
 }
