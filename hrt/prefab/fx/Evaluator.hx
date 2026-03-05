@@ -12,7 +12,6 @@ class Evaluator {
 
 
 	public static function optimize(val: Value) : Value {
-		/*
 		function opt(v: Value) : Value {
 			function tryBoth(a: Value, b: Value, fn: (Value, Value) -> Null<Value>) : Null<Value> {
 				var r = fn(a, b);
@@ -30,9 +29,9 @@ class Evaluator {
 				case VCurveScale(c, s): optScale(VCurve(c), s);
 				case VRandomScale(_, 0.0): VZero;
 				case VAddRandomScale(_, 0.0, add): opt(VConst(add));
-				// case VAddRandCurve(cst, _, 0.0, c): optScale(cst, VCurve(c), VCurveScale(c, cst));
 				case VMult(a, b):
-					var a = opt(a), b = opt(b);
+					var a = opt(a);
+					var b = opt(b);
 					var r = tryBoth(a, b, (x, y) -> switch(x) {
 						case VZero: VZero;
 						case VOne: y;
@@ -43,27 +42,14 @@ class Evaluator {
 							case VRandomScale(ri, rs): VRandomScale(ri, rs * va);
 							default: null;
 						}
-						case VRandomScale(ri, rs): switch(y) {
-							case VCurve(c): VAddRandCurve(0, ri, rs, c);
-							default: null;
-						}
-						case VAddRandomScale(ri, rs, add): switch(y) {
-							case VCurve(c): VAddRandCurve(add, ri, rs, c);
-							default: null;
-						}
 						default: null;
 					});
-					r != null ? opt(r) : VMult(a, b);
+					r != null ? r : VMult(a, b);
 				case VAdd(a, b):
-					var a = opt(a), b = opt(b);
+					var a = opt(a);
+					var b = opt(b);
 					var r = tryBoth(a, b, (x, y) -> switch(x) {
 						case VZero: y;
-						case VOne: switch(y) {
-							case VConst(vb): VConst(1.0 + vb);
-							case VRandomScale(ri, rs): VAddRandomScale(ri, rs, 1.0);
-							case VAddRandomScale(ri, rs, add): VAddRandomScale(ri, rs, 1.0 + add);
-							default: null;
-						}
 						case VConst(va): switch(y) {
 							case VConst(vb): VConst(va + vb);
 							case VRandomScale(ri, rs): VAddRandomScale(ri, rs, va);
@@ -72,7 +58,7 @@ class Evaluator {
 						}
 						default: null;
 					});
-					r != null ? opt(r) : VAdd(a, b);
+					r != null ? r : VAdd(a, b);
 				case VVector(x, y, z, w):
 					var ox = opt(x);
 					var oy = opt(y);
@@ -84,7 +70,6 @@ class Evaluator {
 						VOne;
 					else
 						VVector(ox, oy, oz, ow);
-				// case VHsl(h, s, l, a): VHsl(opt(h), opt(s), opt(l), opt(a));
 				case VBlend(a, b, p): VBlend(opt(a), opt(b), p);
 				case VParamRemap(a, p): VParamRemap(opt(a), p);
 				case VValueRemap(a, r): VValueRemap(opt(a), opt(r));
@@ -94,9 +79,8 @@ class Evaluator {
 				default: v;
 			}
 		}
-		*/
 
-		var r = val; //opt(val);
+		var r = opt(val);
 		addStat(val, r);
 		return r;
 	}
