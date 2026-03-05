@@ -3,15 +3,32 @@ package hrt.ui;
 #if hui
 
 typedef TreeItem = {
-			name: String,
-			children: Array<TreeItem>,
-			id: String,
-		};
+	name: String,
+	children: Array<TreeItem>,
+	id: String,
+};
 
 class HuiViewGym extends HuiView<{}> {
 	static var SRC =
 		<hui-view-gym>
+			<hui-tab-container>
+				<gym-widgets display-name="Widgets"/>
+				<gym-layouts display-name="Layouts"/>
+			</hui-tab-container>
+		</hui-view-gym>
 
+	override function getDisplayName() : String {
+		return "Hui Gym";
+	}
+
+	static var _ = HuiView.register("gym", HuiViewGym);
+}
+
+class GymWidgets extends HuiElement {
+	static var asciiChars = " !&quot;#$%&amp;'()*+,-./0123456789:;&lt;=&gt;?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~'";
+
+	static var SRC =
+		<gym-widgets>
 			<hui-text("hui-tree")/>
 			<hui-element class="example">
 				<hui-tree id="tree"/>
@@ -20,6 +37,7 @@ class HuiViewGym extends HuiView<{}> {
 			<hui-text("hui-text")/>
 			<hui-element class="example">
 				<hui-text("Example ! This is a text")/>
+				<hui-text(asciiChars)/>
 				<hui-text("Lorem ipsum dolor sit amet consectetur adipiscing elit. Placerat in id cursus mi pretium tellus duis. Urna tempor pulvinar vivamus fringilla lacus nec metus. Integer nunc posuere ut hendrerit semper vel class. Conubia nostra inceptos himenaeos orci varius natoque penatibus. Mus donec rhoncus eros lobortis nulla molestie mattis. Purus est efficitur laoreet mauris pharetra vestibulum fusce. Sodales consequat magna ante condimentum neque at luctus. Ligula congue sollicitudin erat viverra ac tincidunt nam. Lectus commodo augue arcu dignissim velit aliquam imperdiet. Cras eleifend turpis fames primis vulputate ornare sagittis. Libero feugiat tristique accumsan maecenas potenti ultricies habitant. Cubilia curae hac habitasse platea dictumst lorem ipsum. Faucibus ex sapien vitae pellentesque sem placerat in. Tempus leo eu aenean sed diam urna tempor.")/>
 			</hui-element>
 
@@ -76,18 +94,46 @@ class HuiViewGym extends HuiView<{}> {
 				</hui-tab-container>
 			</hui-element>
 
-			<hui-text("hui-scene")/>
+			<hui-text("hui-sliders")/>
 			<hui-element class="example">
-				<hui-split-container direction="vertical">
-					<hui-split-container direction="horizontal">
-						<hui-scene id="test-scene"/>
-						<hui-scene id="test-scene2"/>
-					</hui-split-container>
-						<hui-element/>
-				</hui-split-container>
+				<hui-slider/>
+				<hui-slider step={1} min={0} max={10} decimals={2}/>
 			</hui-element>
 
-		</hui-view-gym>
+			<hui-text("hui-checkbox")/>
+			<hui-element class="example">
+				<hui-checkbox/>
+			</hui-element>
+
+			<hui-text("hui-buttons")/>
+			<hui-element class="example">
+				<hui-button/>
+				<hui-button><hui-icon("tick")/></hui-button>
+				<hui-button><hui-text("Text Button")/></hui-button>
+				<hui-button><hui-icon("tick")/><hui-text("Icon Button")/></hui-button>
+			</hui-element>
+
+			<hui-text("hui-commands")/>
+			<hui-element class="example">
+				<hui-text("This is a sandbox for hui-commands and how nested command contexts interacts")/>
+
+				<hui-element id="commands-first">
+					<hui-text("Paste in me") id="commands-first-text"/>
+					<hui-element id="commands-second">
+						<hui-text("Paste in me") id="commands-second-text"/>
+						<hui-input-box/>
+					</hui-element>
+				</hui-element>
+			</hui-element>
+		</gym-widgets>
+
+	function new(?parent) {
+		super(parent);
+		initComponent();
+
+		setupTree();
+		setupCommands();
+	}
 
 	function testMenu() :  Array<HuiMenu.MenuItem> {
 		var submenu: Array<HuiMenu.MenuItem> = [
@@ -128,15 +174,35 @@ class HuiViewGym extends HuiView<{}> {
 			];
 	}
 
-	override function getDisplayName() : String {
-		return "Hui Gym";
-	}
+	function setupCommands() {
+		// Register command is usually only reserved for internal hui usage, but we make
+		// an exception here for demo purpose
+		@:privateAccess
+		{
+			commandsFirst.registerCommand(HuiCommands.search, ElementAndChildren, () -> {
+				commandsFirstText.text = "Search";
+			});
 
-	function new(state: Dynamic, ?parent) {
-		super(state, parent);
-		initComponent();
+			commandsFirst.registerCommand(HuiCommands.paste, ElementAndChildren, () -> {
+				commandsFirstText.text = "Paste";
+			});
 
-		setupTree();
+			commandsFirst.registerCommand(HuiCommands.copy, ElementAndChildren, () -> {
+				commandsFirstText.text = "Copy";
+			});
+
+			commandsFirst.registerCommand(HuiCommands.undo, ElementAndChildren, () -> {
+				commandsFirstText.text = "Undo";
+			});
+
+			commandsSecond.registerCommand(HuiCommands.paste, ElementAndChildren, () -> {
+				commandsSecondText.text = "Paste";
+			});
+
+			commandsSecond.registerCommand(HuiCommands.copy, ElementAndChildren, () -> {
+				commandsSecondText.text = "Copy";
+			});
+		}
 	}
 
 	function setupTree() {
@@ -212,8 +278,55 @@ class HuiViewGym extends HuiView<{}> {
 			return item.children;
 		};
 	}
-
-	static var _ = HuiView.register("gym", HuiViewGym);
 }
+
+class GymLayouts extends HuiElement {
+	static var SRC =
+		<gym-layouts>
+			<hui-element class="example">
+				<hui-split-container direction="vertical">
+					<hui-element class="first">
+						<hui-element class="first-fixed"/>
+						<hui-element class="first-dynamic">
+							<hui-element class="first-content">
+								<hui-text("0")/>
+								<hui-text("1")/>
+								<hui-text("2")/>
+								<hui-text("3")/>
+								<hui-text("4")/>
+								<hui-text("5")/>
+								<hui-text("6")/>
+								<hui-text("7")/>
+								<hui-text("8")/>
+								<hui-text("9")/>
+								<hui-text("0")/>
+								<hui-text("1")/>
+								<hui-text("2")/>
+								<hui-text("3")/>
+								<hui-text("4")/>
+								<hui-text("5")/>
+								<hui-text("6")/>
+								<hui-text("7")/>
+								<hui-text("8")/>
+								<hui-text("9")/>
+								<hui-text("0")/>
+								<hui-text("1")/>
+								<hui-text("2")/>
+								<hui-text("3")/>
+								<hui-text("4")/>
+								<hui-text("5")/>
+								<hui-text("6")/>
+								<hui-text("7")/>
+								<hui-text("8")/>
+								<hui-text("9")/>
+							</hui-element>
+						</hui-element>
+					</hui-element>
+					<hui-element class="second"/>
+				</hui-split-container>
+			</hui-element>
+		</gym-layouts>
+}
+
 
 #end

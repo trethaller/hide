@@ -10,6 +10,11 @@ class HuiBase extends HuiElement {
 	var layers : Array<h2d.Flow>;
 	var currentMenu: HuiMenu;
 	public var mainLayout: HuiMainLayout;
+	var commandFocus: HuiElement;
+
+	var checkedCommandEvents: Map<hxd.Event, Bool> = [];
+
+	var previousUiScale: Float = 0;
 
 	// Keep track of the element that currently own the scroll event.
 	// Reset when lastScrollTime is too old compared to now (inspired by the same behavior in google chrome)
@@ -26,6 +31,7 @@ class HuiBase extends HuiElement {
 
 		if (hide.App.DEBUG) {
 			style.allowInspect = true;
+			style.inspectKeyCode = hxd.Key.SHIFT;
 		}
 
 		loadStyle();
@@ -84,10 +90,52 @@ class HuiBase extends HuiElement {
 		onWheel = (e) -> {
 			e.propagate = false;
 		}
+
+		// var scene = getScene();
+		// var commandHandler = new h2d.Interactive(10000,10000);
+		// commandHandler.cursor = null;
+		// scene.add(commandHandler, 30);
+		// commandHandler.propagateEvents = true;
+		// commandHandler.onKeyDown = (e) -> {
+		// 	trace(commandFocus, e);
+		// 	var current = commandFocus;
+		// 	while(current != null) {
+		// 		if(current.handleCommand(e)) {
+		// 			e.propagate = false;
+		// 			break;
+		// 		}
+		// 		current = current.parentElement;
+		// 	}
+		// };
+	}
+
+	/**
+		Try to get the HuiBase for a given h2d object by searching if one of it's parent is a HuiBase.
+		Should only be used with element that can't inherit from HuiElement (because they need to inherit another h2d base class).
+		For HuiElements, see uiBase
+	**/
+	public static function get(object: h2d.Object) {
+		var current = object;
+		while (current != null) {
+			var base = Std.downcast(current, HuiBase);
+			if (base != null)
+				return base;
+			current = current.parent;
+		}
+		return null;
 	}
 
 	public function contextMenu(items: Array<hrt.ui.HuiMenu.MenuItem>) {
 		openMenu(items, {}, {object: Point(getScene().mouseX, getScene().mouseY), directionX: EndOutside, directionY: EndOutside});
+	}
+
+	public function addPopup(popup: HuiPopup, ?anchor: hrt.ui.HuiPopup.Anchor) {
+		popup.anchor = anchor;
+		@:privateAccess popup.addDismissable(this);
+	}
+
+	public function setCommandFocus(element: HuiElement) {
+		commandFocus = element;
 	}
 
 	public function openMenu(items: Array<hrt.ui.HuiMenu.MenuItem>, options: hrt.ui.HuiMenu.MenuOptions, ?anchor: hrt.ui.HuiPopup.Anchor) : HuiMenu {
@@ -95,12 +143,41 @@ class HuiBase extends HuiElement {
 			currentMenu.close();
 
 		var menu = new HuiMenu(items, options);
-		menu.addDismissable(this);
-		menu.anchor = anchor;
+		addPopup(menu, anchor);
 		currentMenu = menu;
 		menu.onCloseListeners.push(() -> if (menu == currentMenu) currentMenu = null);
 
 		return currentMenu;
+	}
+
+	/**
+		Check if event triggers a event if object is the currently focused object in the h2d scene.
+		Return true if the event has been handled by a registered command
+	**/
+	public function checkCommand(event: hxd.Event, object: h2d.Object) : Bool {
+		if (checkedCommandEvents.exists(event)) {
+			return false;
+		}
+		checkedCommandEvents.set(event, true);
+		var current = object;
+		while(current != null) {
+			var element = Std.downcast(current, HuiElement);
+			if (element != null && element.registeredCommands != null) {
+				for (command in element.registeredCommands) {
+					if (command.context == ElementAndChildren || (current == object && command.context == Element)) {
+						if (command.command.check(event)) {
+							event.propagate = false;
+							command.callback();
+							if (!event.propagate) {
+								return true;
+							}
+						}
+					}
+				}
+			}
+			current = current.parent;
+		}
+		return false;
 	}
 
 	function loadStyle() {
@@ -114,6 +191,31 @@ class HuiBase extends HuiElement {
 
 	public function updateStyle(dt: Float) {
 		style.sync(dt);
+		checkedCommandEvents.clear();
+
+		// HiDPI support for hldx targets
+		#if hldx
+		var monitorDx = @:privateAccess hxd.Window.getInstance().window.getCurrentMonitor();
+		var monitors = hxd.Window.getMonitors();
+
+		if (monitorDx != null) {
+			var scene = getScene();
+			var monitor = Lambda.find(monitors, (m) -> m.name == monitorDx);
+			if (monitor != null) {
+				// snap to 0.5
+				var upscale = hxd.Math.round((monitor.height / 1080.0) * 2.0) / 2.0;
+
+				upscale = hxd.Math.max(upscale, 1.0);
+
+				if (previousUiScale != upscale) {
+					previousUiScale = upscale;
+					dom.toggleClass("high-dpi", upscale > 1.0);
+				}
+				var engine = scene.renderer.engine;
+				scene.scaleMode = Fixed(Math.ceil(engine.width / upscale), Math.ceil(engine.height / upscale), upscale, Center, Center);
+			}
+		}
+		#end
 	}
 }
 

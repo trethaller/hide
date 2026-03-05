@@ -21,7 +21,14 @@ class Checkbox extends Widget<Bool> {
 
 		return checkbox;
 		#elseif hui
-		return new hrt.ui.HuiText("checkbox");
+		var cb = new hrt.ui.HuiCheckbox();
+		cb.value = value;
+		cb.onValueChanged = () -> {
+			value = cb.value;
+			broadcastValueChange(false);
+		};
+		checkbox = cb;
+		return checkbox;
 		#else
 		return null;
 		#end

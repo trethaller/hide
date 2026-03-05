@@ -17,11 +17,34 @@ class App extends hxd.App {
 		ide = new hide.Ide();
 		ide.app = this;
 		ui = new hrt.ui.HuiBase(this, s2d);
+
+		if (hide.Ide.inst.ideConfig.recentProjects?.length > 0) {
+			@:privateAccess hide.Ide.inst.setProject(hide.Ide.inst.ideConfig.recentProjects[0]);
+		}
+
+
+
+		var winSize = ide.getLocalStorage("windowSize") ?? {w: 800, h: 600};
+		// hxd.Window.getInstance().resize(winSize.w, winSize.h);
+		#if hldx
+		@:privateAccess hxd.Window.getInstance().window.maximize();
+		#end
+	}
+
+	override function onResize() {
+		super.onResize();
+		var win = hxd.Window.getInstance();
+		hide.Ide.inst.saveLocalStorage("windowSize", {w: win.width, h: win.height});
+	}
+
+	override function dispose() {
+		ide.dispose();
 	}
 
 	override public function update(dt: Float) {
 		super.update(dt);
 
+		ide.update(dt);
 		tryCall(() -> ui.updateStyle(dt));
 
 		updateProfiling();
@@ -30,13 +53,13 @@ class App extends hxd.App {
 	function updateProfiling() {
 		if (hxd.Key.isPressed(hxd.Key.F9)) {
 			if (!hide.tools.Profiler.processing) {
-				trace("Strating profiler");
+				Ide.showInfo("Starting profiler");
 				hide.tools.Profiler.start();
 			} else {
 				hide.tools.Profiler.save();
 				var converted = Sys.command(".vscode\\post_profile.bat") == 0;
 				hide.tools.Profiler.stop();
-				trace("Stopping profiler", converted);
+				Ide.showInfo("Stopping profiler");
 			}
 		}
 	}

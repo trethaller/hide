@@ -635,6 +635,14 @@ class Prefab {
 	function editorRemoveInstanceObjects() : Void {
 	}
 
+
+	/**
+		Return a list of files required by this prefab to be eventually loaded. Not recursive.
+	**/
+	function getPreloadFiles() : Array<String> {
+		return source == null ? [] : [source];
+	}
+
 	/**
 		New hideKit based edit function. Return false if the edit function was not yet ported to the new system
 	**/
@@ -832,6 +840,50 @@ class Prefab {
 		var obj : Dynamic = {};
 		obj.type = type;
 		return this.copyToDynamic(obj);
+	}
+
+
+	// Advanced editor utilities
+
+	function editorReplaceChild(who: Prefab, with: Prefab) : Void {
+		var indexWho = children.indexOf(who);
+		if (indexWho == -1)
+			return;
+		removeChild(who);
+		addChildAt(with, indexWho);
+		for (child in who.children.copy()) {
+			with.addChild(child);
+		}
+	}
+
+	/**
+		Replace this prefab with `with` in its parent
+	**/
+	function editorReplace(with: Prefab) : Void {
+		parent?.editorReplaceChild(this, with);
+	}
+
+	/**
+		Create a new prefab with the type newClass and copies all the data that is common between this prefab and newClass,
+		then replace this prefab in its parent with the copy. Returns the copy.
+	**/
+	function editorConvert<T:Prefab>(newClass: Class<T>) : T {
+		var copy = editorCopyToNewClass(this, newClass);
+		editorReplace(copy);
+		return copy;
+	}
+
+	/**
+		Create a copy of this prefab but with another class, preserving all the data that is common between
+		the prefab class and newClass
+	**/
+	static function editorCopyToNewClass<T:Prefab>(prefab: Prefab, newClass: Class<T>) : T {
+		var commonClass = hrt.tools.ClassUtils.getCommonClass([Type.getClass(prefab), cast newClass], Prefab);
+		var common : Prefab = Type.createEmptyInstance(commonClass);
+		common.copy(prefab);
+		var newPrefab : T = Type.createEmptyInstance(newClass);
+		newPrefab.load(common.save());
+		return newPrefab;
 	}
 
 	/**

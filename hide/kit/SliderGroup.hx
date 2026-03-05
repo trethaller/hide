@@ -9,52 +9,89 @@ class SliderGroup extends Line {
 	var lock : NativeElement;
 	var lockIcon : NativeElement;
 
+	#if hui
+	var lineContent : NativeElement;
+	override function get_nativeContent():NativeElement {
+		return lineContent;
+	}
+	#end
+
 	override function makeSelf():Void {
+
+
+		labelGroup = NativeElement.create("kit-label");
+
+
 		#if js
-
-
-		labelGroup = js.Browser.document.createElement("kit-label");
 
 		lock = new hide.Element('<fancy-button class="fancy-tiny quiet" title="Link sliders">')[0];
 		lockIcon = new hide.Element('<div class="icon ico">')[0];
-		lock.appendChild(lockIcon);
+		lock.addChild(lockIcon);
 
-		lock.onclick = (e: js.html.MouseEvent) -> {
+		lock.get().onclick = (e: js.html.MouseEvent) -> {
 			isLocked = !isLocked;
 			saveSetting(Global, "lock", isLocked ? null : false);
 			refresh();
 		}
-		isLocked = getSetting(Global, "lock") ?? true;
-		refresh();
 
-		labelGroup.appendChild(lock);
+		labelGroup.addChild(lock);
 
 
 		if (label != null) {
 			labelElement = js.Browser.document.createSpanElement();
-			labelElement.innerText = label ?? "";
-			labelGroup.appendChild(labelElement);
+			labelElement.get().innerText = label ?? "";
+			labelGroup.addChild(labelElement);
 		}
 
+		#elseif hui
+
+		var huiLock = new hrt.ui.HuiElement(labelGroup);
+		huiLock.dom.addClass("kit-lock");
+
+		huiLock.onClick = (e) ->  {
+			isLocked = !isLocked;
+			saveSetting(Global, "lock", isLocked ? null : false);
+			refresh();
+		}
+
+		if (label != null) {
+			labelElement = NativeElement.create("kit-label");
+			new hrt.ui.HuiText(label, labelElement);
+			labelGroup.addChild(labelElement);
+		}
+
+		lock = huiLock;
+
+		#end
+
+
+		isLocked = getSetting(Global, "lock") ?? true;
+		refresh();
+
 		stealChildLabel(labelGroup);
+
+		#if js
 
 		setupPropLine(labelGroup, null);
 
 		if (multiline) {
-			native.classList.add("multiline");
+			native.addClass("multiline");
 		}
 
 		#elseif hui
-		native = new hrt.ui.HuiElement();
-		native.dom.addClass("line");
-		//refreshLabel();
+
+		lineContent = new hrt.ui.HuiLine();
+		setupPropLine(labelGroup, lineContent);
+
 		#end
 	}
 
 	function refresh() {
 		#if js
-        lockIcon.classList.toggle("ico-link", isLocked);
-        lockIcon.classList.toggle("ico-unlink", !isLocked);
+        lockIcon.toggleClass("ico-link", isLocked);
+        lockIcon.toggleClass("ico-unlink", !isLocked);
+		#elseif hui
+        lock.toggleClass("locked", isLocked);
 		#end
 	}
 }

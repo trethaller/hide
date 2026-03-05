@@ -36,6 +36,8 @@ class Select extends Widget<Dynamic> {
 	var select: NativeElement;
 	var text: NativeElement;
 	var dropdown = null;
+	#elseif hui
+	var select : hrt.ui.HuiSelect;
 	#end
 
 	public function new(parent: Element, id: String, entries: EntriesOrStrings = null) {
@@ -52,9 +54,9 @@ class Select extends Widget<Dynamic> {
 
 		select = js.Browser.document.createElement("kit-select");
 		text = js.Browser.document.createSpanElement();
-		select.appendChild(text);
+		select.addChild(text);
 
-		select.onclick = (e: js.html.MouseEvent) -> {
+		select.get().onclick = (e: js.html.MouseEvent) -> {
 			var selectEntries: Array<hide.comp.ContextMenu.MenuItem> = [for (i => entry in entries) {label: entry.label, click: valueChanged.bind(entry)}];
 			if (dropdown == null) {
 				dropdown = hide.comp.ContextMenu.createDropdown(select, selectEntries);
@@ -67,6 +69,16 @@ class Select extends Widget<Dynamic> {
 		}
 
 		return select;
+		#elseif hui
+		var s = new hrt.ui.HuiSelect();
+		s.items = [for (i => entry in entries) { label: entry.label, value: entry.value }];
+		s.value = value;
+		s.onValueChanged = () -> {
+			value = s.value;
+			broadcastValueChange(false);
+		}
+		select = s;
+		return s;
 		#end
 		return null;
 	}
@@ -82,7 +94,16 @@ class Select extends Widget<Dynamic> {
 				break;
 			}
 		}
-		text.innerText = label;
+		text.get().innerText = label;
+		#elseif hui
+		if (select == null)
+			return;
+		for (entry in entries) {
+			if ((entry.value == value) || (entry.equalsNull && value == null) ) {
+				select.value = entry.value;
+				break;
+			}
+		}
 		#end
 	}
 

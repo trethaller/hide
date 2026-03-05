@@ -2,6 +2,12 @@ package hrt.ui;
 
 #if hui
 
+typedef RegisteredCommand = {
+	command: hrt.ui.HuiCommands.HuiCommand,
+	context: hrt.ui.HuiCommands.ShortcutContext,
+	callback: Void -> Void,
+};
+
 @:parser(hrt.ui.CssParser)
 class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	static var SRC =
@@ -19,6 +25,7 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	public var onMove(default, set) : hxd.Event->Void = emptyFuncEventVoid;
 	public var onClick(default, set) : hxd.Event->Void = emptyFuncEventVoid;
 	public var onPush(default, set) : hxd.Event->Void = emptyFuncEventVoid;
+	public var onRelease(default, set) : hxd.Event->Void = emptyFuncEventVoid;
 	public var onKeyDown(default, set) : hxd.Event->Void = emptyFuncEventVoid;
 	public var onKeyUp(default, set) : hxd.Event->Void = emptyFuncEventVoid;
 	public var onTextInput(default, set) : hxd.Event->Void = emptyFuncEventVoid;
@@ -26,6 +33,7 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	public var onFocusLost(default, set) : hxd.Event->Void = emptyFuncEventVoid;
 	public var onWheel(default, set) : hxd.Event->Void = emptyFuncEventVoid;
 	public var onDoubleClick(default, set) : hxd.Event->Void = null;
+	@:p public var propagateEvents(get, set): Bool;
 
 	public var onChildrenChanged : Void -> Void = emtpyFuncVoidVoid;
 
@@ -33,6 +41,8 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	public var parentElement(get, never): HuiElement;
 	public var childElements(get, never): Array<HuiElement>;
 	public var uiBase(get, never) : HuiBase;
+
+	var registeredCommands: Array<RegisteredCommand> = null;
 
 	function set_enable(b) {
 		if( !b && dom != null )
@@ -74,6 +84,7 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	function set_onMove(v) {onMove = v; makeInteractive(); return v;};
 	function set_onClick(v) {onClick = v; makeInteractive(); return v;};
 	function set_onPush(v) {onPush = v; makeInteractive(); return v;};
+	function set_onRelease(v) {onRelease = v; makeInteractive(); return v;};
 	function set_onKeyDown(v) {onKeyDown = v; makeInteractive(); return v;};
 	function set_onKeyUp(v) {onKeyUp = v; makeInteractive(); return v;};
 	function set_onTextInput(v) {onTextInput = v; makeInteractive(); return v;};
@@ -82,11 +93,21 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	function set_onWheel(v) {onWheel = v; makeInteractive(); return v;};
 	function set_onDoubleClick(v) {onDoubleClick = v; makeInteractive(); return v;};
 
+	function get_propagateEvents() {return interactive?.propagateEvents;}
+	function set_propagateEvents(v) {makeInteractive(); return interactive.propagateEvents = v;};
+
 	override function set_overflow(v) {
 		if (v == h2d.Flow.FlowOverflow.Scroll) {
 			makeInteractive();
 		}
 		return super.set_overflow(v);
+	}
+
+	/* Avoid reflows when visibility don't actually change */
+	override function set_visible(b:Bool):Bool {
+		if (b != visible)
+			return super.set_visible(b);
+		return visible;
 	}
 
 	function get_huiBg() : HuiBackground {return Std.downcast(background, HuiBackground);};
@@ -108,6 +129,24 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	public function new(?parent: h2d.Object) {
 		super(parent);
 		initComponent();
+	}
+
+	function registerCommand(command: hrt.ui.HuiCommands.HuiCommand, context: hrt.ui.HuiCommands.ShortcutContext, cb: Void -> Void) {
+		makeInteractive();
+		registeredCommands ??= [];
+		unregisterCommand(command);
+		registeredCommands.push({command: command, callback: cb, context: context});
+	}
+
+	function unregisterCommand(command: hrt.ui.HuiCommands.HuiCommand) {
+		if (registeredCommands == null)
+			return;
+		for (i => registeredCommand in registeredCommands) {
+			if (registeredCommand.command == command) {
+				registeredCommands.splice(i, 1);
+				return;
+			}
+		}
 	}
 
 	public function makeInteractive() {
@@ -214,7 +253,7 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	}
 
 	function getDisplayName() : String {
-		return displayName ?? toString();
+		return displayName ?? Type.getClassName(Type.getClass(this));
 	}
 
 
@@ -222,6 +261,7 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 		if (!enable)
 			return;
 		dom.hover = true;
+		e.propagate = true;
 		onOver(e);
 	}
 
@@ -229,6 +269,7 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 		if (!enable)
 			return;
 		dom.hover = false;
+		e.propagate = true;
 		onOut(e);
 	}
 
@@ -261,6 +302,9 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 			return;
 
 		dom.active = true;
+
+		grabCommandFocus();
+
 		onPush(e);
 	}
 
@@ -269,6 +313,7 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 			return;
 
 		dom.active = false;
+		onRelease(e);
 	}
 
 	function onReleaseOutsideInternal(e: hxd.Event) {
@@ -282,6 +327,9 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 		if (!enable)
 			return;
 
+		if (uiBase.checkCommand(e, this))
+			return;
+
 		onKeyDown(e);
 	}
 
@@ -290,6 +338,10 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 			return;
 
 		onKeyUp(e);
+	}
+
+	function grabCommandFocus() {
+		uiBase.setCommandFocus(this);
 	}
 
 	function onTextInputInternal(e: hxd.Event) {

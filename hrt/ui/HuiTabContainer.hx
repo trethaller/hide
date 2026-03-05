@@ -25,6 +25,8 @@ class HuiTabContainer extends HuiElement {
 		syncTabsQueued = true;
 
 		content.onChildrenChanged = () -> syncTabsQueued = true;
+
+		onAfterReflow = () -> syncTabsQueued = true;
 	}
 
 	public function setTab(newElement: HuiElement) {
@@ -56,9 +58,15 @@ class HuiTabContainer extends HuiElement {
 			}
 		}
 
+		saveDisplayState("currentTab", childElements.indexOf(activeTabElement));
+
 		syncActiveTabStyle();
 
 		syncTabsQueued = true;
+	}
+
+	function getDefaultCurrentTab() : HuiElement {
+		return getTabs()[0];
 	}
 
 	function closeTab(id: Int) {
@@ -100,8 +108,11 @@ class HuiTabContainer extends HuiElement {
 		}
 
 
-		if (activeTabElement == null && elements.length > 0) {
-			setTab(elements[0]);
+		if (activeTabElement == null) {
+			var newTab = getDefaultCurrentTab();
+			if (newTab != null) {
+				setTab(newTab);
+			}
 		}
 
 		var cumulativeWidth = 0.0;
@@ -146,7 +157,17 @@ class HuiTabContainer extends HuiElement {
 	}
 
 	public function removeTab(tab: HuiElement) {
-		content.removeChild(tab);
+		if (tab == activeTabElement) {
+			var index = getTabs().indexOf(activeTabElement);
+			content.removeChild(tab);
+			index = hxd.Math.iclamp(index, 0, getTabs().length - 1);
+			var newTab = getTabs()[index];
+			if (newTab != null) {
+				setTab(newTab);
+			}
+		} else {
+			content.removeChild(tab);
+		}
 	}
 
 	public function getTabs() : Array<HuiElement> {

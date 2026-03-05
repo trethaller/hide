@@ -1027,6 +1027,7 @@ class SceneEditor {
 	public var gridSize : Int;
 	public var showGrid = false;
 
+	var outlineRfx : hrt.prefab.rfx.Outline;
 	var viewportAxis : hrt.tools.ViewportAxis = null;
 	var guide2d : h2d.Object = null;
 	var grid2d : h2d.Graphics = null;
@@ -1278,7 +1279,9 @@ class SceneEditor {
 			return;
 
 		var show = showOverlays && getOrInitConfig("sceneeditor.showOutlines", true);
-		scene.s3d.renderer.showEditorOutlines = show;
+		for (e in scene.s3d.renderer.effects)
+			if (e == outlineRfx)
+				e.enabled = show;
 	}
 
 	public function delayReady(callback: () -> Void) {
@@ -2032,6 +2035,9 @@ class SceneEditor {
 		this.camera2D = camera2D;
 
 		updateViewportOverlays();
+
+		outlineRfx = new hrt.prefab.rfx.Outline(null, null);
+		scene.s3d.renderer.effects.push(outlineRfx);
 
 		makeGuide2d();
 
@@ -3732,7 +3738,12 @@ class SceneEditor {
 			});
 
 			for (m in meshes) {
-				var col = m.getCollider();
+				var col = try {
+					m.getCollider();
+				} catch(e : Dynamic) {
+					ide.quickError('Error while trying to display debug colliders');
+					null;
+				}
 				if (col == null)
 					continue;
 				var d = col.makeDebugObj();
@@ -4176,7 +4187,7 @@ class SceneEditor {
 			properties.clear();
 
 			if( elts.length > 0 ) {
-				var commonClass = hrt.tools.ClassUtils.getCommonClass(elts, hrt.prefab.Prefab);
+				var commonClass = hrt.tools.ClassUtils.getCommonClassInstance(elts, hrt.prefab.Prefab);
 				var parentClass = Type.getSuperClass(commonClass);
 				var hasNewInspector = false;
 
@@ -4262,7 +4273,7 @@ class SceneEditor {
 					properties.element.addClass("hide-properties");
 					properties.element.addClass("props");
 					if (elts.length > 1) {
-						var commonClass = hrt.tools.ClassUtils.getCommonClass(elts, hrt.prefab.Prefab);
+						var commonClass = hrt.tools.ClassUtils.getCommonClassInstance(elts, hrt.prefab.Prefab);
 
 						var proxyPrefab = Type.createInstance(commonClass, [null, new ContextShared()]);
 						proxyPrefab.load(haxe.Json.parse(haxe.Json.stringify(elts[0].save())));

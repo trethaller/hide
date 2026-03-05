@@ -1,8 +1,16 @@
 package hide;
 
+enum HideViewPosition {
+	Left;
+	Main;
+	Bottom;
+}
 class Ide extends hide.tools.IdeData {
 	public static var inst : Ide;
 	public var app : hide.App;
+
+	// Keep a small delay between saves to avoid spamming the disk with writes
+	var localStorageSaveDelay: Float = 0.0;
 
 	static final localUserDataSave = "hidehl.json";
 
@@ -25,13 +33,35 @@ class Ide extends hide.tools.IdeData {
 		queueStorageSave();
 	}
 
+	public function deleteLocalStorage(key: String) {
+		Reflect.deleteField(localStorage, key);
+
+		queueStorageSave();
+	}
+
 	function queueStorageSave() {
-		if (!localStorageSaveQueued) {
 		localStorageSaveQueued = true;
-		hide.App.defer(() -> {
-				sys.io.File.saveContent(appPath + "/" + localUserDataSave, haxe.Json.stringify(localStorage, "\t"));
+	}
+
+	function saveLocalStorageToDisk() {
+		sys.io.File.saveContent(appPath + "/" + localUserDataSave, haxe.Json.stringify(localStorage, "\t"));
+	}
+
+	public function update(dt: Float) {
+		localStorageSaveDelay -= dt;
+		if (localStorageSaveQueued) {
+			if (localStorageSaveDelay < 0) {
+				saveLocalStorageToDisk();
+				localStorageSaveDelay = 5.0;
 				localStorageSaveQueued = false;
-			});
+			}
+		}
+	}
+
+	public function dispose() {
+		if (localStorageSaveQueued) {
+			saveLocalStorageToDisk();
+			localStorageSaveQueued = false;
 		}
 	}
 
@@ -61,18 +91,20 @@ class Ide extends hide.tools.IdeData {
 		hxd.res.Loader.currentInstance = new hxd.res.Loader(new hxd.fs.LocalFileSystem(resourceDir, null));
 		loadDatabase(true);
 
-		var pluginPath = getPath("../hide-plugin.hl");
-		if (sys.FileSystem.exists(pluginPath)) {
-			if (!hl.Api.loadPlugin(pluginPath)) {
-				throw "Plugin failed to load";
-			} else {
-				trace("Plugin loaded");
-			}
-		} else {
-			trace('No plugin found for project (searched $pluginPath )');
-		}
+		// var pluginPath = getPath("../hide-plugin.hl");
+		// if (sys.FileSystem.exists(pluginPath)) {
+		// 	if (!hl.Api.loadPlugin(pluginPath)) {
+		// 		throw "Plugin failed to load";
+		// 	} else {
+		// 		trace("Plugin loaded");
+		// 	}
+		// } else {
+		// 	trace('No plugin found for project (searched $pluginPath )');
+		// }
 
-		app.ui.mainLayout.onSetProject();
+		@:privateAccess app.ui.mainLayout.rebuild();
+
+		hxd.Window.getInstance().title = "HideHL - " + new haxe.io.Path(dir).file;
 
 		h3d.mat.MaterialSetup.current = new h3d.mat.PbrMaterialSetup();
 
@@ -89,14 +121,27 @@ class Ide extends hide.tools.IdeData {
 	}
 
 	public function openFile(filePath: String) {
-		if (filePath.split(".").pop() == "prefab") {
-			var tab = new hide.view.Prefab({path: filePath});
-			app.ui.uiBase.mainLayout.projectLayout.mainPanel.addTab(tab);
-			app.ui.uiBase.mainLayout.projectLayout.mainPanel.setTab(tab);
-			return;
-		}
+		var path = new haxe.io.Path(filePath);
 
-		//throw "No handler for file " + filePath;
+		try {
+			switch (path.ext) {
+				case "prefab", "fx":
+					openView(new hide.view.Prefab({path: filePath}), Main);
+			}
+		} catch (e) {
+			showError('Could not open file ${getRelPath(filePath)} :<br/>$e');
+		}
+	}
+
+	public function openView(view: hrt.ui.HuiView<Dynamic>, position: HideViewPosition = Main) {
+		var layout = app.ui.uiBase.mainLayout.projectLayout;
+		var panel = switch(position) {
+			case Left: layout.leftPanel;
+			case Main: layout.mainPanel;
+			case Bottom: layout.bottomPanel;
+		}
+		panel.addTab(view);
+		panel.setTab(view);
 	}
 
 	public function getCDBContent<T>( sheetName : String ) : Array<T> {
@@ -111,4 +156,18 @@ class Ide extends hide.tools.IdeData {
 	}
 
 
+	static public function showError(message: String) {
+		Sys.stdout().writeString('[Err ] $message\n');
+		inst.app.ui.uiBase.mainLayout.addToast(message, Error);
+	}
+
+	static public function showWarning(message: String) {
+		Sys.stdout().writeString('[Warn] $message\n');
+		inst.app.ui.uiBase.mainLayout.addToast(message, Warning);
+	}
+
+	static public function showInfo(message: String) {
+		Sys.stdout().writeString('[Info] $message\n');
+		inst.app.ui.uiBase.mainLayout.addToast(message, Info);
+	}
 }

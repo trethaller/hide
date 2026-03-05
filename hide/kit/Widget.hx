@@ -23,10 +23,11 @@ abstract class Widget<ValueType> extends Element {
 		label = v;
 		#if js
 		if (labelElement != null)
-			labelElement.innerHTML = label;
+			labelElement.get().innerHTML = label;
 		#elseif hui
-		if (labelElement != null)
-			labelElement.text = label;
+		if (labelElement != null) {
+			var text = labelElement.get().find((e) -> Std.downcast(e, hrt.ui.HuiText)).text = label;
+		}
 		#end
 		return label;
 	}
@@ -39,7 +40,7 @@ abstract class Widget<ValueType> extends Element {
 
 	var input: NativeElement;
 
-	var labelElement: #if js NativeElement #elseif hui hrt.ui.HuiText #else Dynamic #end;
+	var labelElement: NativeElement;
 
 	function get_value() return value;
 	function set_value(v:ValueType) {
@@ -64,25 +65,12 @@ abstract class Widget<ValueType> extends Element {
 
 		#if js
 		labelElement = js.Browser.document.createElement("kit-label");
-		labelElement.innerHTML = label;
+		labelElement.get().innerHTML = label;
 		#elseif hui
-		if (parentLine == null) {
-			native = new hrt.ui.HuiElement();
-			native.dom.addClass("line");
-		} else {
-			native = new hrt.ui.HuiElement();
-			native.dom.addClass("widget");
+		if (label != null && label.length > 0) {
+			labelElement = NativeElement.create("kit-label");
+			new hrt.ui.HuiText(label, labelElement);
 		}
-
-		var labelContainer = new hrt.ui.HuiElement(native);
-		labelContainer.dom.addClass("label");
-
-		labelElement = new hrt.ui.HuiText(labelContainer);
-		labelElement.text = label;
-
-
-		input = makeInput();
-		native.addChild(input);
 		#end
 
 		if (!customIndeterminate() && isIndeterminate()) {
@@ -90,7 +78,7 @@ abstract class Widget<ValueType> extends Element {
 		}
 		else {
 			input = makeInput();
-			setupPropLine(labelElement, input);
+			setupPropLine(labelElement, input, #if hui false #else true #end);
 			syncValueUI();
 		}
 
@@ -101,7 +89,7 @@ abstract class Widget<ValueType> extends Element {
 		#if js
 
 		labelElement = js.Browser.document.createElement("kit-label");
-		labelElement.innerHTML = label;
+		labelElement.get().innerHTML = label;
 
 		var indeterminate = js.Browser.document.createElement("kit-div");
 		var label = js.Browser.document.createElement("kit-label");
@@ -168,7 +156,12 @@ abstract class Widget<ValueType> extends Element {
 			var childInput = Std.downcast(childElement, Type.getClass(this));
 
 			if (childInput != null) {
-				childInput.value = haxe.Json.parse(haxe.Json.stringify(value));
+				switch(Type.typeof(value)) {
+					case TEnum(_):
+						childInput.value = value;
+					default:
+						childInput.value = haxe.Json.parse(haxe.Json.stringify(value));
+				}
 				childInput.onFieldChange(isTemporaryEdit);
 				childInput.onValueChange(isTemporaryEdit);
 				@:privateAccess childProperties.prefab?.updateInstance(fieldName);

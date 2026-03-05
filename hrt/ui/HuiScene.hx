@@ -87,24 +87,28 @@ class HuiScene extends HuiElement {
 		}
 
 		if (currentVisible) {
+			var scene = getScene();
+			var scale = getScene().viewportScaleX;
+
 			s3d.scenePosition = s3d.scenePosition ?? {offsetX: 0, offsetY: 0, width: 0, height: 0};
-			s3d.scenePosition.offsetX = display.absX;
-			s3d.scenePosition.offsetY = display.absY;
-			s3d.scenePosition.width = Std.int(display.width);
-			s3d.scenePosition.height = Std.int(display.height);
+			s3d.scenePosition.offsetX = display.absX * scale;
+			s3d.scenePosition.offsetY = display.absY * scale;
+			s3d.scenePosition.width = Std.int(display.width * scale);
+			s3d.scenePosition.height = Std.int(display.height * scale);
 		}
 
 		super.sync(ctx);
 	}
 
 	override function onAfterReflow() {
-		var textureWidth = hxd.Math.iclamp(hxd.Math.round(innerWidth), 1, 4096);
-		var textureHeight = hxd.Math.iclamp(hxd.Math.round(innerHeight), 1, 4096);
+		var scale = getScene().viewportScaleX;
+
+		var textureWidth = hxd.Math.iclamp(hxd.Math.round(innerWidth * scale) , 1, 4096);
+		var textureHeight = hxd.Math.iclamp(hxd.Math.round(innerHeight * scale) , 1, 4096);
 
 		if (renderTexture == null) {
 			renderTexture = new h3d.mat.Texture(1,1, [Target]);
 			renderTexture.depthBuffer = new h3d.mat.Texture(1,1, hxd.PixelFormat.Depth24Stencil8);
-
 		}
 
 		if(renderTexture.width != textureWidth || renderTexture.height != textureHeight) {

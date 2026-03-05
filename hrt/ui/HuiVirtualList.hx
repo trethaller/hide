@@ -44,6 +44,10 @@ class HuiVirtualList<T> extends HuiElement {
 
 	}
 
+	public function refresh() {
+		needRefresh = true;
+	}
+
 	function new(?parent) {
 		super(parent);
 		initComponent();
@@ -181,11 +185,6 @@ class HuiVirtualList<T> extends HuiElement {
 					elements.set(cast item, element);
 					itemContainer.addChild(element);
 					itemContainer.getProperties(element).isAbsolute = true;
-
-					// Force apply style because we need the accurate font info for the layout
-					// element.dom.applyStyle(style);
-				} else {
-					itemContainer.addChild(element);
 				}
 				refreshItem(item, cast element.childElements[0]);
 				oldElements.remove(cast item);
@@ -215,6 +214,7 @@ class HuiVirtualList<T> extends HuiElement {
 				case Auto: throw "error";
 				case null: -itemPixelScroll;
 			}
+			startY = hxd.Math.round(startY);
 			scrollRequest = null;
 
 			currentItem.y = startY;
@@ -293,6 +293,8 @@ class HuiVirtualList<T> extends HuiElement {
 			var height = hxd.Math.imax(10,Std.int(((maxVisible-scrollIndex) / (items.length-1)) * scrollBarHeight));
 			customScrollbarCursor.y = avg - height*0.5;
 			customScrollbarCursor.setHeight(height);
+
+			customScrollbar.visible = scrollbarMin > 0 || scrollbarMax < scrollBarHeight;
 		}
 
 		for (item => old in oldElements) {

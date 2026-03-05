@@ -1,5 +1,4 @@
 hui-main-layout {
-	background: #770077;
 	layout: vertical;
 
 	auto-size: 1;
@@ -49,5 +48,18 @@ hui-main-layout {
 			#bottom-panel {
 			}
 		}
+	}
+
+	> #toast-overlay {
+		debug: false;
+		layout: vertical;
+		reverse: true;
+
+		position: absolute;
+		halign: middle;
+		valign: bottom;
+		auto-size: 1;
+		fill-width: 1;
+		fill-height: 1;
 	}
 }

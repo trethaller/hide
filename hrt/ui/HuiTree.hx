@@ -4,6 +4,7 @@ import hrt.ui.HuiTreeLine;
 #if hui
 
 enum RefreshFlag {
+	Refresh;
 	RegenerateFlatten;
 	RootData;
 }
@@ -25,20 +26,31 @@ typedef TreeItemData = {
 	parent: TreeItemData,
 	children: Array<TreeItemData>,
 	name: String,
+	icon: String,
 	depth: Int,
 	filterState: FilterFlags,
 	identifier: String,
+	?searchRanges: hide.Search.SearchRanges,
 }
 
 class HuiTree<TreeItem> extends HuiElement {
 	static var SRC =
 		<hui-tree>
-			<hui-virtual-list id="list"/>
+			<hui-element id="search-bar-container">
+				<hui-input-box id="search-bar" class="search"/>
+				<hui-button class="small-square quiet" id="search-bar-close"><hui-icon("close")/></hui-button>
+			</hui-element>
+			<hui-element id="wrapper">
+				<hui-virtual-list id="list"/>
+			</hui-element>
 		</hui-tree>
 
 	var rootData: Array<TreeItemData> = [];
 	var flatList: Array<TreeItemData> = [];
 	var keyboardFocus: TreeItemData = null;
+
+	var selectedElements: Map<{}, Bool> = [];
+	var lastSelectedElement: TreeItemData = null;
 
 	/**TreeItem -> TreeItemData map**/
 	var itemMap : Map<{}, TreeItemData> = [];
@@ -58,43 +70,91 @@ class HuiTree<TreeItem> extends HuiElement {
 		requestRefresh(RegenerateFlatten);
 		requestRefresh(RootData);
 
-		onKeyDown = (e:hxd.Event) -> {
-			if (e.keyCode == hxd.Key.UP) {
-				focusMove(-1);
-				e.propagate = false;
-			} else if (e.keyCode == hxd.Key.DOWN) {
-				focusMove(1);
-				e.propagate = false;
-			} else if (e.keyCode == hxd.Key.RIGHT) {
+		searchBarContainer.visible = false;
 
-				if (keyboardFocus != null) {
-					if (!isOpen(keyboardFocus)) {
-						toggleItemOpen(keyboardFocus, true);
-					} else if (keyboardFocus.children?.length > 0) {
-						focusSetInternal(keyboardFocus.children[0]);
-					}
-					e.propagate = false;
-				}
-			} else if (e.keyCode == hxd.Key.LEFT) {
-				if (keyboardFocus != null) {
-					if (!isOpen(keyboardFocus)) {
-						if (keyboardFocus.parent != null) {
-							focusSetInternal(keyboardFocus.parent);
-						}
-					} else {
-						toggleItemOpen(keyboardFocus, false);
-					}
-					e.propagate = false;
-				}
-			}
+		registerCommand(HuiCommands.search,  ElementAndChildren, () -> {
+			openSearch();
+		});
+
+		searchBar.onKeyDown = keyDownHandler.bind(true);
+		searchBar.onChange = () -> {
+			keyboardFocus = null;
+			requestRefresh(RegenerateFlatten);
 		}
+		searchBarClose.onClick = (e) -> {
+			closeSearch();
+		}
+
+		onKeyDown = keyDownHandler.bind(false);
 
 		onPush = (e:hxd.Event) -> {
 			if (e.button == 0) {
 				interactive.focus();
 				e.propagate = false;
+
+				if (!hxd.Key.isDown(hxd.Key.CTRL)) {
+					selectedElements.clear();
+					userSelectionChanged();
+				}
 			}
 		}
+	}
+
+	function closeSearch() {
+		searchBar.textInput.blur();
+		searchBarContainer.visible = false;
+		requestRefresh(RegenerateFlatten);
+	}
+
+	function keyDownHandler(isSearchBar: Bool, e: hxd.Event) {
+		// we need to do this because e.cancel = true will make the event propagate even
+		// if e.propagate is false, and we need the e.cancel = true to override the search bar
+		// default behavior
+		if (!isSearchBar && searchBar.textInput.hasFocus())
+			return;
+
+		if (e.keyCode == hxd.Key.ESCAPE) {
+			if (searchBarContainer.visible) {
+				closeSearch();
+				e.propagate = false;
+			}
+		}
+		if (e.keyCode == hxd.Key.UP) {
+			focusMove(-1);
+			e.propagate = false;
+		} else if (e.keyCode == hxd.Key.DOWN) {
+			focusMove(1);
+			searchBar.textInput.preventDefault = true;
+			e.propagate = false;
+		} else if (e.keyCode == hxd.Key.RIGHT) {
+			if (keyboardFocus != null) {
+				if (!isOpen(keyboardFocus)) {
+					toggleItemOpen(keyboardFocus, true);
+				} else if (keyboardFocus.children?.length > 0) {
+					focusSetInternal(keyboardFocus.children[0]);
+				}
+				e.propagate = false;
+				searchBar.textInput.preventDefault = true;
+			}
+		} else if (e.keyCode == hxd.Key.LEFT) {
+			if (keyboardFocus != null) {
+				if (!isOpen(keyboardFocus)) {
+					if (keyboardFocus.parent != null) {
+						focusSetInternal(keyboardFocus.parent);
+					}
+				} else {
+					toggleItemOpen(keyboardFocus, false);
+				}
+				searchBar.textInput.preventDefault = true;
+				e.propagate = false;
+			}
+		}
+	}
+
+
+	public function openSearch() {
+		searchBarContainer.visible = true;
+		@:privateAccess searchBar.textInput.focus();
 	}
 
 	/**
@@ -111,7 +171,7 @@ class HuiTree<TreeItem> extends HuiElement {
 		}
 	}
 
-	function requestRefresh(refreshFlag: RefreshFlag) {
+	function requestRefresh(refreshFlag: RefreshFlag = RefreshFlag.Refresh) {
 		refreshFlags.set(refreshFlag);
 	}
 
@@ -178,8 +238,43 @@ class HuiTree<TreeItem> extends HuiElement {
 		return "";
 	}
 
+	public dynamic function getItemIcon(item: TreeItem) : String {
+		return HuiRes.icons.file_blank;
+	}
+
 	public dynamic function onItemDoubleClick(e: hxd.Event, item: TreeItem) : Void {
 
+	}
+
+	/**
+		Called every time the selection changed by an action from the user
+	**/
+	public dynamic function onUserSelectionChanged() : Void {
+
+	}
+
+	function userSelectionChanged() : Void {
+		requestRefresh();
+		onUserSelectionChanged();
+	}
+
+	/**
+		Replace the current selected elements in the tree with selection.
+		Does not call onUserSelectionChanged
+	**/
+	public function setSelection(selection: Array<TreeItem>) : Void {
+		selectedElements.clear();
+		for (item in selection) {
+			var data = itemMap.get(cast item);
+			if (data == null) {
+				selectedElements.set(cast item, true);
+			}
+		}
+		requestRefresh();
+	}
+
+	public function getSelectedItems() : Array<TreeItem> {
+		return [for (item => _ in selectedElements) (cast item:TreeItemData).item];
 	}
 
 	override function sync(ctx:h2d.RenderContext) {
@@ -196,6 +291,8 @@ class HuiTree<TreeItem> extends HuiElement {
 				list.setItems(flatList);
 			}
 
+			list.refresh();
+
 			refreshFlags = RefreshFlags.ofInt(0);
 		}
 	}
@@ -203,8 +300,31 @@ class HuiTree<TreeItem> extends HuiElement {
 	function generateItem(data: TreeItemData) : HuiElement {
 		var line = new HuiTreeLine(data, this);
 
-		line.onClick = (e) -> {
+		line.onCaretClick = () -> {
 			toggleItemOpen(data);
+		}
+
+		line.onItemSelect = (shift, ctrl) -> {
+			if (!ctrl) {
+				selectedElements.clear();
+			}
+
+			if (shift && lastSelectedElement != null) {
+				var idx = flatList.indexOf(lastSelectedElement);
+				var ourIndex = flatList.indexOf(data);
+				var min = hxd.Math.imin(idx, ourIndex);
+				var max = hxd.Math.imax(idx, ourIndex);
+
+				if (min >= 0) {
+					for (i in min...max+1) {
+						selectedElements.set(cast flatList[i], true);
+					}
+				}
+			} else {
+				selectedElements.set(cast data, true);
+				lastSelectedElement = data;
+			}
+			userSelectionChanged();
 		}
 
 		line.onDoubleClick = (e) -> {
@@ -250,6 +370,7 @@ class HuiTree<TreeItem> extends HuiElement {
 					depth: 0,
 					line: null,
 					name: null,
+					icon: null,
 					identifier: null,
 				});
 
@@ -269,14 +390,59 @@ class HuiTree<TreeItem> extends HuiElement {
 	function updateData(data: TreeItemData) {
 		data.children = null; // invalidate children if we are regenerating the tree
 		data.name = StringTools.htmlEscape(getItemName(cast data.item));
+		data.icon = getItemIcon(cast data.item);
 		data.identifier = getIdentifier(cast data.item);
 	}
 
 	function flatten() {
+
+		if (searchBarContainer.visible) {
+			var currentSearch = searchBar.text;
+			var searchQuery = hide.Search.createSearchQuery(searchBar.text.toLowerCase());
+			function filterRec(children: Array<TreeItemData>, parentMatch: Bool = false) : Bool {
+				var anyVisible = false;
+				for (child in children) {
+					child.filterState = FilterFlags.ofInt(0);
+					child.searchRanges = null;
+
+					if (child.children == null) {
+						generateChildren(child);
+					}
+
+					if (parentMatch) {
+						child.filterState |= Visible;
+					}
+
+					if (currentSearch.length == 0) {
+						child.filterState |= Visible;
+					} else {
+						child.searchRanges = hide.Search.computeSearchRanges(child.name, searchQuery);
+						if (child.searchRanges != null) {
+							child.filterState |= MatchSearch;
+							child.filterState |= Visible;
+							child.filterState |= Open;
+						}
+					}
+
+					if(filterRec(child.children, child.filterState.has(MatchSearch)) && currentSearch.length > 0) {
+						child.filterState |= Visible;
+						child.filterState |= Open;
+					}
+
+					anyVisible = anyVisible || child.filterState.has(Visible);
+				}
+
+				return anyVisible;
+			}
+
+			filterRec(rootData);
+		}
+
 		flatList.resize(0);
+
 		function rec(items: Array<TreeItemData>) {
 			for (item in items) {
-				if (!item.filterState.has(Visible)) continue;
+				if (searchBarContainer.visible && !item.filterState.has(Visible)) continue;
 				flatList.push(item);
 				if (isOpen(item)) {
 					if (item.children == null) {
@@ -289,8 +455,12 @@ class HuiTree<TreeItem> extends HuiElement {
 		rec(rootData);
 	}
 
-	public function isOpen(data: TreeItemData) {
+	public function isOpen(data: TreeItemData) : Bool {
 		return (openState.get(data.identifier) ?? false) || data.filterState.has(Open);
+	}
+
+	public function isSelected(data: TreeItemData) : Bool {
+		return selectedElements.get(cast data) == true;
 	}
 }
 
