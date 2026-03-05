@@ -827,18 +827,17 @@ class Curve extends Prefab {
 		var g = find(":g");
 		var b = find(":b");
 		var a = find(":a");
-
-		var v : Value = null;
 		if(a != null && r == null && g == null && b == null)
-			v = a.makeVal();
-		else {
-			v = VVector(
+			return a.makeVal();
+
+		if(a == null && r == null && g == null && b == null)
+			return VOne; // White by default
+
+		return VVector(
 				r != null ? r.makeVal() : VConst(1.0),
 				g != null ? g.makeVal() : VConst(1.0),
 				b != null ? b.makeVal() : VConst(1.0),
 				a != null ? a.makeVal() : VConst(1.0));
-		}
-		return Evaluator.optimize(v);
 	}
 
 	static var _ = Prefab.register("curve", Curve);

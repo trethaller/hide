@@ -189,6 +189,8 @@ class Evaluator {
 
 	public function getVector(pidx: Int=0, v: Value, time: Float, vec: h3d.Vector4) {
 		switch(v) {
+			case VMult(a, b):
+				throw "need optimization";
 			case VVector(x, y, z, null):
 				vec.set(getFloat(pidx, x, time), getFloat(pidx, y, time), getFloat(pidx, z, time), 1.0);
 			case VVector(x, y, z, w):

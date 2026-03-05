@@ -215,7 +215,7 @@ class BaseFXTools {
 					ret.push({
 						idx: paramCount - 1,
 						def: v,
-						value: val
+						value: Evaluator.optimize(val),
 					});
 				default:
 					var base = 1.0;
