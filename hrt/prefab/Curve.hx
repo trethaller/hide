@@ -1,4 +1,5 @@
 package hrt.prefab;
+import hrt.prefab.fx.Evaluator;
 
 #if editor
 import hide.prefab.EditContext;
@@ -810,11 +811,11 @@ class Curve extends Prefab {
 			return vc;
 		}
 
-		return VVector(
+		return Evaluator.optimize(VVector(
 			curveOrVal(x, defVal),
 			curveOrVal(y, defVal),
 			curveOrVal(z, defVal),
-			curveOrVal(w, 1.0));
+			curveOrVal(w, 1.0)));
 	}
 
 	public static function getColorValue(curves: Array<Curve>) : Value {
@@ -826,29 +827,18 @@ class Curve extends Prefab {
 		var g = find(":g");
 		var b = find(":b");
 		var a = find(":a");
-		var h = find(":h");
-		var s = find(":s");
-		var l = find(":l");
 
-		if(h != null || s != null || l != null) {
-			return VHsl(
-				h != null ? h.makeVal() : VConst(0.0),
-				s != null ? s.makeVal() : VConst(1.0),
-				l != null ? l.makeVal() : VConst(1.0),
+		var v : Value = null;
+		if(a != null && r == null && g == null && b == null)
+			v = a.makeVal();
+		else {
+			v = VVector(
+				r != null ? r.makeVal() : VConst(1.0),
+				g != null ? g.makeVal() : VConst(1.0),
+				b != null ? b.makeVal() : VConst(1.0),
 				a != null ? a.makeVal() : VConst(1.0));
 		}
-
-		if(a != null && r == null && g == null && b == null)
-			return a.makeVal();
-
-		if(a == null && r == null && g == null && b == null)
-			return VOne; // White by default
-
-		return VVector(
-			r != null ? r.makeVal() : VConst(1.0),
-			g != null ? g.makeVal() : VConst(1.0),
-			b != null ? b.makeVal() : VConst(1.0),
-			a != null ? a.makeVal() : VConst(1.0));
+		return Evaluator.optimize(v);
 	}
 
 	static var _ = Prefab.register("curve", Curve);

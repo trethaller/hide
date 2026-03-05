@@ -12,6 +12,7 @@ class Evaluator {
 
 
 	public static function optimize(val: Value) : Value {
+		/*
 		function opt(v: Value) : Value {
 			function tryBoth(a: Value, b: Value, fn: (Value, Value) -> Null<Value>) : Null<Value> {
 				var r = fn(a, b);
@@ -83,7 +84,7 @@ class Evaluator {
 						VOne;
 					else
 						VVector(ox, oy, oz, ow);
-				case VHsl(h, s, l, a): VHsl(opt(h), opt(s), opt(l), opt(a));
+				// case VHsl(h, s, l, a): VHsl(opt(h), opt(s), opt(l), opt(a));
 				case VBlend(a, b, p): VBlend(opt(a), opt(b), p);
 				case VParamRemap(a, p): VParamRemap(opt(a), p);
 				case VValueRemap(a, r): VValueRemap(opt(a), opt(r));
@@ -93,8 +94,9 @@ class Evaluator {
 				default: v;
 			}
 		}
+		*/
 
-		var r = opt(val);
+		var r = val; //opt(val);
 		addStat(val, r);
 		return r;
 	}
@@ -191,13 +193,13 @@ class Evaluator {
 				vec.set(getFloat(pidx, x, time), getFloat(pidx, y, time), getFloat(pidx, z, time), 1.0);
 			case VVector(x, y, z, w):
 				vec.set(getFloat(pidx, x, time), getFloat(pidx, y, time), getFloat(pidx, z, time), getFloat(pidx, w, time));
-			case VHsl(h, s, l, a):
-				var hval = getFloat(pidx, h, time);
-				var sval = getFloat(pidx, s, time);
-				var lval = getFloat(pidx, l, time);
-				var aval = getFloat(pidx, a, time);
-				vec.makeColor(hval, sval, lval);
-				vec.a = aval;
+			// case VHsl(h, s, l, a):
+			// 	var hval = getFloat(pidx, h, time);
+			// 	var sval = getFloat(pidx, s, time);
+			// 	var lval = getFloat(pidx, l, time);
+			// 	var aval = getFloat(pidx, a, time);
+			// 	vec.makeColor(hval, sval, lval);
+			// 	vec.a = aval;
 			case VZero:
 				vec.set(0,0,0,1);
 			case VOne:
@@ -252,9 +254,9 @@ class Evaluator {
 			}
 			sb.add('\n');
 		}
-		sb.add('Source values:\n');
+		sb.add('-- Source values\n');
 		printStats(stats.source);
-		sb.add('Optimized values:\n');
+		sb.add('-- Optimized values:\n');
 		printStats(stats.opt);
 		sys.io.File.saveContent(path, sb.toString());
 		stats = null;
@@ -281,7 +283,7 @@ class Evaluator {
 				case VAdd(a, b): 'VAdd(${rec(a)}, ${rec(b)})';
 				case VMult(a, b): 'VMult(${rec(a)}, ${rec(b)})';
 				case VVector(x, y, z, w): 'VVector(${rec(x)}, ${rec(y)}, ${rec(z)}, ${rec(w)})';
-				case VHsl(h, s, l, a): 'VHsl(${rec(h)}, ${rec(s)}, ${rec(l)}, ${rec(a)})';
+				//case VHsl(h, s, l, a): 'VHsl(${rec(h)}, ${rec(s)}, ${rec(l)}, ${rec(a)})';
 				case VBool(v): 'VBool(${rec(v)})';
 				case VInt(v): 'VInt(${rec(v)})';
 			}
@@ -295,13 +297,19 @@ class Evaluator {
 			switch(v) {
 				// Unpack root vectors for clarity
 				case VVector(x, y, z, w):
-					add(x); add(y); add(z); add(w);
+					add(x);
+					add(y);
+					add(z);
+					if(w != null) add(w);
 				default:
 					add(v);
 			}
 		}
 
-		register(source, stats.source);
+		// if(rec(opt) != rec(source)) {
+		// 	throw "??";
+		// }
 		register(opt, stats.opt);
+		register(source, stats.source);
 	}
 }

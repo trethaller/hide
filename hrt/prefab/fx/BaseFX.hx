@@ -215,7 +215,7 @@ class BaseFXTools {
 					ret.push({
 						idx: paramCount - 1,
 						def: v,
-						value: Evaluator.optimize(val)
+						value: val
 					});
 				default:
 					var base = 1.0;
@@ -251,7 +251,7 @@ class BaseFXTools {
 				continue;
 
 			var curve = Curve.getCurve(rfxElt, f.name);
-			var val = curve != null ? Value.VMult(curve.makeVal(), VConst(1.0)) : VConst(1.0);
+			var val = curve != null ? curve.makeVal() : VConst(1.0);
 			if(ret == null) ret = [];
 			ret.push({ field: f, value: Evaluator.optimize(val) });
 		}

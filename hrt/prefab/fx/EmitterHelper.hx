@@ -16,7 +16,7 @@ class EmitterHelper {
 		var curves = hrt.prefab.Curve.getCurves(scope, name);
 		if(curves == null || curves.length == 0)
 			return null;
-		return Evaluator.optimize(hrt.prefab.Curve.getColorValue(curves));
+		return hrt.prefab.Curve.getColorValue(curves);
 	}
 
 	public static function randProp(name: String) {

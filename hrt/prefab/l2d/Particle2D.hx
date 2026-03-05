@@ -138,7 +138,7 @@ class Particle2D extends Object2D {
 
 		function makeVal(name, def ) : Value {
 			var c = Curve.getCurve(this, name);
-			return c != null ? VCurve(c) : def;
+			return c != null ? c.makeVal() : def;
 		}
 
 		if (paramsParticleGroup != null) {
