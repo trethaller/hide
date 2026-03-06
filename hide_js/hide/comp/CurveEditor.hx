@@ -1134,6 +1134,9 @@ class CurveEditor extends hide.comp.Component {
 		for (c in components)
 			c.afterChange();
 
+		for(c in curves)
+			c.dirty();
+
 		refresh();
 		onChange(false);
 	}

@@ -47,10 +47,22 @@ class CurveKey {
 
 typedef CurveKeys = Array<CurveKey>;
 
+class KeyData {
+	public var time : Float = 0;
+	public var value : Float = 0;
+	public var mode : Int = 0;
+	public var nextHandleDt : Float = 0;
+	public var nextHandleDv : Float = 0;
+	public var prevHandleDt : Float = 0;
+	public var prevHandleDv : Float = 0;
+}
+
+typedef KeyDataArray = #if (hl_ver >= version("1.14.0")) hl.CArray<KeyData> #else Array<KeyData> #end;
+
 class Curve extends Prefab {
 
 	@:s public var keyMode : CurveKeyMode = Linear;
-	@:s public var keys : CurveKeys = [];
+	@:s public var keys(default, set) : CurveKeys = [];
 	@:s public var previewKeys : CurveKeys = [];
 
 	@:s public var blendMode : CurveBlendMode = None;
@@ -72,6 +84,7 @@ class Curve extends Prefab {
 	public var selected : Bool = false;
 
 	var refCurve : Curve = null;
+	var keyData : KeyDataArray;
 
 	function get_duration() {
 		if (blendMode == Reference) {
@@ -84,6 +97,11 @@ class Curve extends Prefab {
 			return Math.min(c1.duration, c2.duration);
 		}
 		return keys[keys.length-1].time;
+	}
+
+	function set_keys(k) {
+		dirty();
+		return keys = k;
 	}
 
 	public function new(parent, shared: ContextShared) {
@@ -100,6 +118,7 @@ class Curve extends Prefab {
 			addKey(1.0, 1.0);
 		}
 		name = StringTools.replace(name, ".", ":");
+		keyData = null;
 		#if editor
 		if (Std.downcast(parent, Curve) != null) {
 			if (StringTools.startsWith(name, parent.name)) {
@@ -153,6 +172,7 @@ class Curve extends Prefab {
 		key.value = val;
 		key.mode = mode != null ? mode : (keys[index] != null ? keys[index].mode : keyMode);
 		keys.insert(index, key);
+		dirty();
 		return key;
 	}
 
@@ -248,24 +268,49 @@ class Curve extends Prefab {
 		}
 	}
 
+	public function dirty() {
+		keyData = null;
+	}
+
+	function rebuild() {
+		var len = keys.length;
+		keyData = #if (hl_ver >= version("1.14.0")) hl.CArray.alloc(KeyData, len) #else [for (_ in 0...len) new KeyData()] #end;
+		for (i in 0...len) {
+			var k = keys[i];
+			var kd = keyData[i];
+			kd.time = k.time;
+			kd.value = k.value;
+			kd.mode = cast k.mode;
+			kd.nextHandleDt = k.nextHandle != null ? k.nextHandle.dt : 0.;
+			kd.nextHandleDv = k.nextHandle != null ? k.nextHandle.dv : 0.;
+			kd.prevHandleDt = k.prevHandle != null ? k.prevHandle.dt : 0.;
+			kd.prevHandleDv = k.prevHandle != null ? k.prevHandle.dv : 0.;
+		}
+	}
+
 	public function getVal(time: Float) : Float {
 		if (blendMode == Reference) {
 			throw "getVal shoudln't be called on curves with Reference mode";
 		}
 
-		switch(keys.length) {
+		var len = keys.length;
+		switch(len) {
 			case 0: return 0;
 			case 1: return keys[0].value;
 			default:
 		}
 
+		if(keyData == null)
+			rebuild();
+
+		var keys = keyData;
+
 		if (loop)
-			time = time % keys[keys.length-1].time;
+			time = time % keys[len - 1].time;
 
 		var idx = -1;
-		for(ik in 0...keys.length) {
-			var key = keys[ik];
-			if(time > key.time)
+		for(ik in 0...len) {
+			if(time > keys[ik].time)
 				idx = ik;
 		}
 
@@ -273,18 +318,14 @@ class Curve extends Prefab {
 			return keys[0].value;
 
 		var cur = keys[idx];
-		var next = keys[idx + 1];
-		if(next == null || cur.mode == Constant)
+		if(idx + 1 >= len || cur.mode == cast Constant)
 			return cur.value;
 
-		if(cur.mode == Linear && cur.nextHandle == null && next.prevHandle == null) {
-			var t = (time - cur.time) / (next.time - cur.time);
-			return cur.value + (next.value - cur.value) * t;
-		}
+		var next = keys[idx + 1];
 
 		var c0t = cur.time;
-		var c1t = cur.time + (cur.nextHandle != null ? cur.nextHandle.dt : 0.);
-		var c2t = next.time + (next.prevHandle != null ? next.prevHandle.dt : 0.);
+		var c1t = cur.time + cur.nextHandleDt;
+		var c2t = next.time + next.prevHandleDt;
 		var c3t = next.time;
 
 		// bisect to find t range for target time
@@ -308,8 +349,8 @@ class Curve extends Prefab {
 		var xfactor = dx == 0 ? 0.5 : (time - x0) / dx;
 
 		var c0v = cur.value;
-		var c1v = cur.value + (cur.nextHandle != null ? cur.nextHandle.dv : 0.);
-		var c2v = next.value + (next.prevHandle != null ? next.prevHandle.dv : 0.);
+		var c1v = cur.value + cur.nextHandleDv;
+		var c2v = next.value + next.prevHandleDv;
 		var c3v = next.value;
 
 		var y0 = bezier(c0v, c1v, c2v, c3v, minT);
