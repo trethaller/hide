@@ -5,8 +5,8 @@ enum Value {
 	VZero;
 	VConst(v: Float);
 	VCurve(c: Curve);
-	VCurveScale(c: Curve, scale: Float, offset: Float);
-	VBlend(a: Value, b: Value, blendVar: String);
+	VOptCurve(c: Curve, scale: Float, offset: Float);
+	VBlendCurves(a: Curve, b: Curve, blendVar: String);
 	VParamRemap(a: Value, param: String);
 	VValueRemap(v: Value, remap: Value);
 	VRandomBetweenCurves(idx: Int, c: Curve);
@@ -15,6 +15,4 @@ enum Value {
 	VAdd(a: Value, b: Value);
 	VMult(a: Value, b: Value);
 	VVector(x: Value, y: Value, z: Value, ?w: Value);
-	VBool(v: Value);
-	VInt(v: Value);
 }

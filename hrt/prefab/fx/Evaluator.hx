@@ -36,7 +36,7 @@ class Evaluator {
 							default: null;
 						}
 						case VCurve(c): switch(y) {
-							case VConst(vb): VCurveScale(c, vb, 0.0);
+							case VConst(vb): VOptCurve(c, vb, 0.0);
 							case VRandom(ri, rs, add): VAddRandCurve(add, ri, rs, c);
 							default: null;
 						}
@@ -49,7 +49,7 @@ class Evaluator {
 					var r = tryBoth(a, b, (x, y) -> switch(x) {
 						case VZero: y;
 						case VCurve(c): switch(y) {
-							case VConst(vb): VCurveScale(c, 0.0, vb);
+							case VConst(vb): VOptCurve(c, 1.0, vb);
 							default: null;
 						}
 						case VConst(va): switch(y) {
@@ -69,12 +69,9 @@ class Evaluator {
 						VZero;
 					else
 						VVector(ox, oy, oz, ow);
-				case VBlend(a, b, p): VBlend(opt(a), opt(b), p);
 				case VParamRemap(a, p): VParamRemap(opt(a), p);
 				case VValueRemap(a, r): VValueRemap(opt(a), opt(r));
 				//case VRandom(ri, s): VRandom(ri, opt(s));
-				case VBool(a): VBool(opt(a));
-				case VInt(a): VInt(opt(a));
 				default: v;
 			}
 		}
@@ -101,11 +98,11 @@ class Evaluator {
 	function getFloatSlow(pidx: Int=0, val: Value, time: Float) : Float {
 		return switch(val) {
 			case VCurve(c):  c.getVal(time);
-			case VCurveScale(c, scale, offset): c.getVal(time) * scale + offset;
+			case VOptCurve(c, scale, offset): c.getVal(time) * scale + offset;
 			case VAddRandCurve(cst, ridx, rscale, c): (cst + getRandom(pidx, ridx) * rscale) * c.getVal(time);
-			case VBlend(a,b,v):
+			case VBlendCurves(a,b,v):
 				var blend = parameters[v] ?? 0.0;
-				return hxd.Math.lerp(getFloatSlow(pidx, a, time), getFloatSlow(pidx, b, time), blend);
+				return hxd.Math.lerp(a.getVal(time), b.getVal(time), blend);
 			case VParamRemap(a, param):
 				var time = parameters[param] ?? 0.0;
 				return getFloatSlow(pidx, a, time);
@@ -152,7 +149,7 @@ class Evaluator {
 		switch(val) {
 			case VConst(v): return v * time;
 			case VCurve(c): return c.getSum(time);
-			case VCurveScale(c, scale, 0.0): return c.getSum(time) * scale;
+			case VOptCurve(c, scale, 0.0): return c.getSum(time) * scale;
 			case VAdd(a, b):
 				return getSum(a, time) + getSum(b, time);
 			case VParamRemap(a, param):
@@ -160,9 +157,9 @@ class Evaluator {
 				return getSum(a, blend) * time;
 			case VMult(a, VConst(b)), VMult(VConst(b), a): return getSum(a, time) * b;
 			case VZero: return 0;
-			case VBlend(a,b,v):
+			case VBlendCurves(a,b,v):
 				var blend = parameters[v] ?? 0.0;
-				return hxd.Math.lerp(getSum(a, time), getSum(b, time), blend);
+				return hxd.Math.lerp(a.getSum(time), b.getSum(time), blend);
 			default: throw "not implemented";
 		}
 		return 0.0;
@@ -253,8 +250,8 @@ class Evaluator {
 				case VZero: "VZero";
 				case VConst(v): "VConst";
 				case VCurve(c): "VCurve";
-				case VCurveScale(c, scale, offset): "VCurveScale";
-				case VBlend(a, b, blendVar): 'VBlend(${rec(a)}, ${rec(b)})';
+				case VOptCurve(c, scale, offset): "VCurveScale";
+				case VBlendCurves(a, b, blendVar): 'VBlendCurves';
 				case VParamRemap(a, param): 'VParamRemap(${rec(a)})';
 				case VValueRemap(v, remap): 'VValueRemap(${rec(v)}, ${rec(remap)})';
 				case VRandomBetweenCurves(idx, c): 'VRandomBetweenCurves';
@@ -266,8 +263,6 @@ class Evaluator {
 				case VMult(a, b): 'VMult(${rec(a)}, ${rec(b)})';
 				case VVector(x, y, z, w): 'VVector(${rec(x)}, ${rec(y)}, ${rec(z)}, ${rec(w)})';
 				//case VHsl(h, s, l, a): 'VHsl(${rec(h)}, ${rec(s)}, ${rec(l)}, ${rec(a)})';
-				case VBool(v): 'VBool(${rec(v)})';
-				case VInt(v): 'VInt(${rec(v)})';
 			}
 		}
 

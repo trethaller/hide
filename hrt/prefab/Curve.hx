@@ -223,7 +223,13 @@ class Curve extends Prefab {
 			case None:
 				return VCurve(this);
 			case Blend:
-				return VBlend(Std.downcast(this.children[0], Curve)?.makeVal() ?? VConst(0.0), Std.downcast(this.children[1], Curve)?.makeVal() ?? VConst(0.0), blendParam);
+				if(this.children.length == 2) {
+					var c1 = Std.downcast(this.children[0], Curve);
+					var c2 = Std.downcast(this.children[1], Curve);
+					if(c1 != null && c2 != null) 
+						return VBlendCurves(c1, c2, blendParam);
+				}
+				return VCurve(this);
 			case RandomBlend:
 				return VCurve(this);
 			case Reference:
