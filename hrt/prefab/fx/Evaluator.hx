@@ -31,8 +31,7 @@ class Evaluator {
 						}
 						case VCurve(c): switch(y) {
 							case VConst(vb): VOptCurve(c, vb, 0.0);
-							case VRandom(ri, rs, add):
-								VMultRandCurve(ri, rs, add, c);
+							case VRandom(ri, rs, add): VMultRandCurve(ri, rs, add, c);
 							default: null;
 						}
 						default: null;
@@ -45,6 +44,7 @@ class Evaluator {
 						case VZero: y;
 						case VCurve(c): switch(y) {
 							case VConst(vb): VOptCurve(c, 1.0, vb);
+							case VRandom(ri, rs, add): VAddRandCurve(ri, rs, add, c);
 							default: null;
 						}
 						case VConst(va): switch(y) {
@@ -95,6 +95,7 @@ class Evaluator {
 			case VCurve(c):  c.getVal(time);
 			case VOptCurve(c, scale, offset): c.getVal(time) * scale + offset;
 			case VMultRandCurve(ridx, rscale, radd, c): (getRandom(pidx, ridx) * rscale + radd) * c.getVal(time);
+			case VAddRandCurve(ridx, rscale, radd, c): (getRandom(pidx, ridx) * rscale + radd) + c.getVal(time);
 			case VBlendCurves(a,b,v,s):
 				var blend = parameters[v] ?? 0.0;
 				return hxd.Math.lerp(a.getVal(time), b.getVal(time), blend) * s;
@@ -252,6 +253,7 @@ class Evaluator {
 				case VRandom(idx, scale, add): 'VRandom';
 				//case VAddRandomScale(idx, scale, add): 'VAddRandomScale';
 				case VMultRandCurve(_): 'VMultRandCurve';
+				case VAddRandCurve(_): 'VAddRandCurve';
 				case VAdd(a, b): 'VAdd(${rec(a)}, ${rec(b)})';
 				case VMult(a, b): 'VMult(${rec(a)}, ${rec(b)})';
 				case VVector(x, y, z, w): 'VVector(${rec(x)}, ${rec(y)}, ${rec(z)}, ${rec(w)})';

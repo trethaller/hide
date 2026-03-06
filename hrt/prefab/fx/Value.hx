@@ -12,6 +12,7 @@ enum Value {
 	VRandomBetweenCurves(idx: Int, a: Curve, b: Curve);
 	VRandom(idx: Int, scale: Float, add: Float);
 	VMultRandCurve(ridx: Int, rscale: Float, cst: Float, c: Curve);
+	VAddRandCurve(ridx: Int, rscale: Float, cst: Float, c: Curve);
 	VAdd(a: Value, b: Value);
 	VMult(a: Value, b: Value);
 	VVector(x: Value, y: Value, z: Value, ?w: Value);
