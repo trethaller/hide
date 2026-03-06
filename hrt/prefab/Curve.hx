@@ -831,7 +831,7 @@ class Curve extends Prefab {
 			return a.makeVal();
 
 		if(a == null && r == null && g == null && b == null)
-			return VOne; // White by default
+			return VConst(1.0); // White by default
 
 		return VVector(
 				r != null ? r.makeVal() : VConst(1.0),

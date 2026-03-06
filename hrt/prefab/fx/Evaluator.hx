@@ -25,21 +25,19 @@ class Evaluator {
 				return def != null ? def : v;
 			}
 			return switch(v) {
-				case VConst(c): optScale(VOne, c);
-				case VCurveScale(c, s): optScale(VCurve(c), s);
-				case VRandomScale(_, 0.0): VZero;
-				case VAddRandomScale(_, 0.0, add): opt(VConst(add));
+				case VConst(0.0): VZero;
 				case VMult(a, b):
 					var a = opt(a);
 					var b = opt(b);
 					var r = tryBoth(a, b, (x, y) -> switch(x) {
 						case VZero: VZero;
-						case VOne: y;
 						case VConst(va): switch(y) {
 							case VConst(vb): VConst(va * vb);
-							case VCurve(c): VCurveScale(c, va);
-							case VCurveScale(c, s): VCurveScale(c, s * va);
-							case VRandomScale(ri, rs): VRandomScale(ri, rs * va);
+							default: null;
+						}
+						case VCurve(c): switch(y) {
+							case VConst(vb): VCurveScale(c, vb, 0.0);
+							case VAddRandomScale(ri, rs, add): VAddRandCurve(add, ri, rs, c);
 							default: null;
 						}
 						default: null;
@@ -50,10 +48,13 @@ class Evaluator {
 					var b = opt(b);
 					var r = tryBoth(a, b, (x, y) -> switch(x) {
 						case VZero: y;
+						case VCurve(c): switch(y) {
+							case VConst(vb): VCurveScale(c, 0.0, vb);
+							default: null;
+						}
 						case VConst(va): switch(y) {
 							case VConst(vb): VConst(va + vb);
 							case VRandomScale(ri, rs): VAddRandomScale(ri, rs, va);
-							case VAddRandomScale(ri, rs, add): VAddRandomScale(ri, rs, va + add);
 							default: null;
 						}
 						default: null;
@@ -66,8 +67,6 @@ class Evaluator {
 					var ow = w != null ? opt(w) : null;
 					if(ox == VZero && oy == VZero && oz == VZero && (ow == null || ow == VZero))
 						VZero;
-					else if(ox == VOne && oy == VOne && oz == VOne && (ow == null || ow == VOne))
-						VOne;
 					else
 						VVector(ox, oy, oz, ow);
 				case VBlend(a, b, p): VBlend(opt(a), opt(b), p);
@@ -102,7 +101,7 @@ class Evaluator {
 	function getFloatSlow(pidx: Int=0, val: Value, time: Float) : Float {
 		return switch(val) {
 			case VCurve(c):  c.getVal(time);
-			case VCurveScale(c, scale): c.getVal(time) * scale;
+			case VCurveScale(c, scale, offset): c.getVal(time) * scale + offset;
 			case VAddRandCurve(cst, ridx, rscale, c): (cst + getRandom(pidx, ridx) * rscale) * c.getVal(time);
 			case VBlend(a,b,v):
 				var blend = parameters[v] ?? 0.0;
@@ -141,7 +140,6 @@ class Evaluator {
 	inline public function getFloat(pidx: Int=0, val: Value, time: Float) : Float {
 		return switch(val) {
 			case VZero: return 0.0;
-			case VOne: return 1.0;
 			case VConst(v): v;
 			case VRandomScale(ridx, scale): getRandom(pidx, ridx) * scale;
 			case VAddRandomScale(ridx, scale, add): getRandom(pidx, ridx) * scale + add;
@@ -152,10 +150,9 @@ class Evaluator {
 
 	public function getSum(val: Value, time: Float) : Float {
 		switch(val) {
-			case VOne: return time;
 			case VConst(v): return v * time;
 			case VCurve(c): return c.getSum(time);
-			case VCurveScale(c, scale): return c.getSum(time) * scale;
+			case VCurveScale(c, scale, 0.0): return c.getSum(time) * scale;
 			case VAdd(a, b):
 				return getSum(a, time) + getSum(b, time);
 			case VParamRemap(a, param):
@@ -188,8 +185,8 @@ class Evaluator {
 			// 	vec.a = aval;
 			case VZero:
 				vec.set(0,0,0,1);
-			case VOne:
-				vec.set(1,1,1,1);
+			case VConst(v):
+				vec.set(v, v, v, 1);
 			default:
 				var f = getFloat(pidx, v, time);
 				vec.set(f, f, f, 1.0);
@@ -207,8 +204,8 @@ class Evaluator {
 				vec.set(getFloat(pidx, x, time), getFloat(pidx, y, time));
 			case VZero:
 				vec.set(0,0);
-			case VOne:
-				vec.set(1,1);
+			case VConst(v):
+				vec.set(v, v);
 			default:
 				var f = getFloat(pidx, v, time);
 				vec.set(f, f);
@@ -254,10 +251,9 @@ class Evaluator {
 		function rec(v: Value) {
 			return switch v {
 				case VZero: "VZero";
-				case VOne: "VOne";
 				case VConst(v): "VConst";
 				case VCurve(c): "VCurve";
-				case VCurveScale(c, scale): "VCurveScale";
+				case VCurveScale(c, scale, offset): "VCurveScale";
 				case VBlend(a, b, blendVar): 'VBlend(${rec(a)}, ${rec(b)})';
 				case VParamRemap(a, param): 'VParamRemap(${rec(a)})';
 				case VValueRemap(v, remap): 'VValueRemap(${rec(v)}, ${rec(remap)})';

@@ -3,10 +3,9 @@ package hrt.prefab.fx;
 // TODO: separate building values from compiled values
 enum Value {
 	VZero;
-	VOne;
 	VConst(v: Float);
 	VCurve(c: Curve);
-	VCurveScale(c: Curve, scale: Float);
+	VCurveScale(c: Curve, scale: Float, offset: Float);
 	VBlend(a: Value, b: Value, blendVar: String);
 	VParamRemap(a: Value, param: String);
 	VValueRemap(v: Value, remap: Value);
