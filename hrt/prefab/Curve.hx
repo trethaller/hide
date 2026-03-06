@@ -248,30 +248,6 @@ class Curve extends Prefab {
 		}
 	}
 
-	inline function findT(cur: CurveKey, next: CurveKey, time: Float) : {minT: Float, maxT: Float} {
-		inline function sampleTime(t) {
-			return bezier(
-				cur.time,
-				cur.time + (cur.nextHandle != null ? cur.nextHandle.dt : 0.),
-				next.time + (next.prevHandle != null ? next.prevHandle.dt : 0.),
-				next.time, t);
-		}
-
-		var minT = 0.;
-		var maxT = 1.;
-		var maxDelta = 1./ 25.;
-
-		while( maxT - minT > maxDelta ) {
-			var t = (maxT + minT) * 0.5;
-			var x = sampleTime(t);
-			if( x > time )
-				maxT = t;
-			else
-				minT = t;
-		}
-		return {minT: minT, maxT: maxT};
-	}
-
 	public function getVal(time: Float) : Float {
 		if (blendMode == Reference) {
 			throw "getVal shoudln't be called on curves with Reference mode";
@@ -301,35 +277,44 @@ class Curve extends Prefab {
 		if(next == null || cur.mode == Constant)
 			return cur.value;
 
-		var T = findT(cur, next, time);
-		var minT = T.minT;
-		var maxT = T.maxT;
-
-		inline function sampleTime(t) {
-			return bezier(
-				cur.time,
-				cur.time + (cur.nextHandle != null ? cur.nextHandle.dt : 0.),
-				next.time + (next.prevHandle != null ? next.prevHandle.dt : 0.),
-				next.time, t);
+		if(cur.mode == Linear && cur.nextHandle == null && next.prevHandle == null) {
+			var t = (time - cur.time) / (next.time - cur.time);
+			return cur.value + (next.value - cur.value) * t;
 		}
 
-		var x0 = sampleTime(minT);
-		var x1 = sampleTime(maxT);
+		var c0t = cur.time;
+		var c1t = cur.time + (cur.nextHandle != null ? cur.nextHandle.dt : 0.);
+		var c2t = next.time + (next.prevHandle != null ? next.prevHandle.dt : 0.);
+		var c3t = next.time;
+
+		// bisect to find t range for target time
+		var minT = 0.;
+		var maxT = 1.;
+		var maxDelta = 1./ 25.;
+
+		while( maxT - minT > maxDelta ) {
+			var t = (maxT + minT) * 0.5;
+			var x = bezier(c0t, c1t, c2t, c3t, t);
+			if( x > time )
+				maxT = t;
+			else
+				minT = t;
+		}
+
+		// interpolate between bracket endpoints
+		var x0 = bezier(c0t, c1t, c2t, c3t, minT);
+		var x1 = bezier(c0t, c1t, c2t, c3t, maxT);
 		var dx = x1 - x0;
 		var xfactor = dx == 0 ? 0.5 : (time - x0) / dx;
 
-		inline function sampleVal(t) {
-			return bezier(
-				cur.value,
-				cur.value + (cur.nextHandle != null ? cur.nextHandle.dv : 0.),
-				next.value + (next.prevHandle != null ? next.prevHandle.dv : 0.),
-				next.value, t);
-		}
+		var c0v = cur.value;
+		var c1v = cur.value + (cur.nextHandle != null ? cur.nextHandle.dv : 0.);
+		var c2v = next.value + (next.prevHandle != null ? next.prevHandle.dv : 0.);
+		var c3v = next.value;
 
-		var y0 = sampleVal(minT);
-		var y1 = sampleVal(maxT);
-		var y = y0 + (y1 - y0) * xfactor;
-		return y;
+		var y0 = bezier(c0v, c1v, c2v, c3v, minT);
+		var y1 = bezier(c0v, c1v, c2v, c3v, maxT);
+		return y0 + (y1 - y0) * xfactor;
 	}
 
 	public function getSum(time: Float) : Float {
