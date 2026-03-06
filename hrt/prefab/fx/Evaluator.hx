@@ -1,13 +1,42 @@
 package hrt.prefab.fx;
 
+
+private enum abstract FastValueType(Int) from Int to Int {
+	var VZero = 0;
+	var VConst = 1;
+	var VCurveScale = 2;
+	var VRandom = 3;
+	var VCurve = 4;
+	var VMultRandCurve = 5;
+	var VBlendCurves = 6;
+	var VAddRandCurve = 7;
+	var VRandomBetweenCurves = 8;
+	var VSlow;
+}
+
+class FastValue {
+	var type : FastValueType;
+	var idx : Int;
+	var scale : Float;
+	var offset : Float;
+	var curve1 : Curve;
+	var curve2 : Curve;
+	var slow : Value;
+}
+
 class Evaluator {
 	var randValues : Array<Float>;
 	public var parameters: Map<String, Float> = [];
+	public var randCount: Int = 0;
 	var stride : Int;
 
 	public function new(?randValues: Array<Float>, stride: Int=0) {
 		this.randValues = randValues;
 		this.stride = stride;
+	}
+
+	public function nextRandIdx(): Int {
+		return randCount++;
 	}
 
 
@@ -85,9 +114,8 @@ class Evaluator {
 		parameters.clear();
 		if (params == null)
 			return;
-		for (p in params) {
+		for (p in params)
 			parameters[p.name] = p.def;
-		}
 	}
 
 	function getFloatSlow(pidx: Int=0, val: Value, time: Float) : Float {
@@ -96,12 +124,12 @@ class Evaluator {
 			case VOptCurve(c, scale, offset): c.getVal(time) * scale + offset;
 			case VMultRandCurve(ridx, rscale, radd, c): (getRandom(pidx, ridx) * rscale + radd) * c.getVal(time);
 			case VAddRandCurve(ridx, rscale, radd, c): (getRandom(pidx, ridx) * rscale + radd) + c.getVal(time);
-			case VBlendCurves(a,b,v,s):
-				var blend = parameters[v] ?? 0.0;
-				return hxd.Math.lerp(a.getVal(time), b.getVal(time), blend) * s;
-			case VParamRemap(a, param):
-				var time = parameters[param] ?? 0.0;
-				return getFloatSlow(pidx, a, time);
+		case VBlendCurves(a,b,v,s):
+			var blend = parameters[v] ?? 0.0;
+			return hxd.Math.lerp(a.getVal(time), b.getVal(time), blend) * s;
+		case VParamRemap(a, param):
+			var time = parameters[param] ?? 0.0;
+			return getFloatSlow(pidx, a, time);
 			case VValueRemap(a, remap):
 				var time = getFloatSlow(pidx, remap, time);
 				return getFloatSlow(pidx, a, time);
@@ -146,14 +174,14 @@ class Evaluator {
 			case VOptCurve(c, scale, 0.0): return c.getSum(time) * scale;
 			case VAdd(a, b):
 				return getSum(a, time) + getSum(b, time);
-			case VParamRemap(a, param):
-				var blend = parameters[param] ?? 0.0;
-				return getSum(a, blend) * time;
-			case VMult(a, VConst(b)), VMult(VConst(b), a): return getSum(a, time) * b;
-			case VZero: return 0;
-			case VBlendCurves(a,b,v,s):
-				var blend = parameters[v] ?? 0.0;
-				return hxd.Math.lerp(a.getSum(time), b.getSum(time), blend) * s;
+		case VParamRemap(a, param):
+			var blend = parameters[param] ?? 0.0;
+			return getSum(a, blend) * time;
+		case VMult(a, VConst(b)), VMult(VConst(b), a): return getSum(a, time) * b;
+		case VZero: return 0;
+		case VBlendCurves(a,b,v,s):
+			var blend = parameters[v] ?? 0.0;
+			return hxd.Math.lerp(a.getSum(time), b.getSum(time), blend) * s;
 			default: throw "not implemented";
 		}
 		return 0.0;
@@ -246,7 +274,7 @@ class Evaluator {
 				case VCurve(c): "VCurve";
 				case VOptCurve(c, scale, offset): "VCurveScale";
 				case VBlendCurves(_,_,_,_): 'VBlendCurves';
-				case VParamRemap(a, param): 'VParamRemap(${rec(a)})';
+				case VParamRemap(a, _): 'VParamRemap(${rec(a)})';
 				case VValueRemap(v, remap): 'VValueRemap(${rec(v)}, ${rec(remap)})';
 				case VRandomBetweenCurves(idx, a, b): 'VRandomBetweenCurves';
 				// case VRandom(idx, scale): 'VRandom(${rec(scale)})';

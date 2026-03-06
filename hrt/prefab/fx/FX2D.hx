@@ -236,8 +236,8 @@ class FX2D extends Object2D implements BaseFX {
 				return null;
 			anyFound = true;
 			if(uniform && curves.length == 1 && curves[0].name == name)
-				return Evaluator.optimize(VMult(curves[0].makeVal(), VConst(scale)));
-			return Curve.getVectorValue(curves, defVal, scale);
+			return Evaluator.optimize(VMult(curves[0].makeVal(), VConst(scale)));
+		return Curve.getVectorValue(curves, defVal, scale);
 		}
 
 		function makeColor(name: String) {
@@ -288,7 +288,7 @@ class FX2D extends Object2D implements BaseFX {
 		var fxanim : FX2DAnimation = cast local2d;
 		fxanim.init(this);
 		getObjAnimations(this, fxanim.objects);
-		hrt.prefab.fx.BaseFX.BaseFXTools.getCustomAnimations(this, fxanim.customAnims);
+		hrt.prefab.fx.BaseFX.BaseFXTools.getCustomAnimations(this, fxanim.customAnims, null);
 	}
 
 	override function makeObject(parent2d: h2d.Object) : h2d.Object {

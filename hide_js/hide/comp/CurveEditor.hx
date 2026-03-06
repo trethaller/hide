@@ -1674,29 +1674,30 @@ class CurveEditor extends hide.comp.Component {
 				pointBuffer.resize(num*2);
 
 			var v = curve.makeVal(bypassRemap);
-			evaluator.parameters.clear();
-			var paramName = curve.getRemapParameter();
+		evaluator.parameters.clear();
+		var paramName = curve.getRemapParameter();
 
-			var fx = Std.downcast(curve.getRoot(false), hrt.prefab.fx.FX);
+		var fx = Std.downcast(curve.getRoot(false), hrt.prefab.fx.FX);
 
-			if (curve.blendParam != null) {
-				for (param in fx.parameters) {
+		if (curve.blendParam != null) {
+			for (param in fx.parameters) {
 					if (param.name == curve.blendParam) {
-						evaluator.parameters.set(curve.blendParam, param.def);
+					evaluator.parameters.set(curve.blendParam, param.def);
 					}
-				}
 			}
+		}
 
-			if (paramName != null) {
-				for (param in fx.parameters) {
-					if (param.name == paramName) {
-						evaluator.parameters.set(paramName, param.def);
-						var color = '#${StringTools.hex(param.color)}';
-						svg.polylineRawArray(curveGroup, [param.def * xScale, (-yOffset) * yScale - height / 2, param.def * xScale, (-yOffset) * yScale + height / 2], {"stroke": color, "stroke-width": "0.5px", "stroke-dasharray":"7, 5" });
-					}
+		if (paramName != null) {
+			for (param in fx.parameters) {
+				if (param.name == paramName) {
+					evaluator.parameters.set(paramName, param.def);
+					var color = '#${StringTools.hex(param.color)}';
+					svg.polylineRawArray(curveGroup, [param.def * xScale, (-yOffset) * yScale - height / 2, param.def * xScale, (-yOffset) * yScale + height / 2], {"stroke": color, "stroke-width": "0.5px", "stroke-dasharray":"7, 5" });
 				}
 			}
-			if (v == null) throw "wtf";
+		}
+
+		if (v == null) throw "wtf";
 
 			inline function getTime(i : Int) {
 				return hxd.Math.lerp(minTime, maxTime, i/(num-1));

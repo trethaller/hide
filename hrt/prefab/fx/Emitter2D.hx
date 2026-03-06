@@ -75,7 +75,7 @@ class Particle2DInstance extends h2d.SpriteBatch.BatchElement {
 
 	function getInitialAbsPos(m : h2d.col.Matrix, dt : Float) {
 		var def = emitter.instDef;
-		var evaluator = @:privateAccess emitter.evaluator;
+		var evaluator = emitter.evaluator;
 		var t = hxd.Math.clamp(curLifeTime / lifeTime);
 
 		m.identity();
@@ -101,7 +101,7 @@ class Particle2DInstance extends h2d.SpriteBatch.BatchElement {
 
 	function getCurrentAbsPos(m : h2d.col.Matrix, dt : Float) {
 		var def = emitter.instDef;
-		var evaluator = @:privateAccess emitter.evaluator;
+		var evaluator = emitter.evaluator;
 		var t = hxd.Math.clamp(curLifeTime / lifeTime);
 
 		if (t == 0) {
@@ -244,7 +244,7 @@ class Particle2DInstance extends h2d.SpriteBatch.BatchElement {
 class Emitter2DObject extends h2d.Object {
 	public var particles : Array<Particle2DInstance> = [];
 	public var batch : h2d.SpriteBatch;
-	var evaluator : Evaluator;
+	public var evaluator : Evaluator;
 	var rand : hxd.Rand;
 
 	var prevTime : Float;
@@ -635,10 +635,11 @@ class Emitter2D extends Object2D {
 		super.updateInstance(propName);
 
 		var emitterObj = Std.downcast(local2d, Emitter2DObject);
-		var randIdx = {v: 0};
+		var eval = emitterObj.evaluator;
+		eval.randCount = 0;
 
 		inline function makeParam(scope: Prefab, name: String): Value {
-			return EmitterHelper.makeParam(scope, name, PARAMS, props, randIdx);
+			return EmitterHelper.makeParam(scope, name, PARAMS, props, eval);
 		}
 
 		var d = new InstanceDef();
@@ -701,7 +702,7 @@ class Emitter2D extends Object2D {
 		emitterObj.startSpeed			=	makeParam(this, "instStartSpeed");
 		emitterObj.startWorldSpeed 		= 	makeParam(this, "instStartWorldSpeed");
 
-		emitterObj.init(randIdx.v, this);
+		emitterObj.init(eval.randCount, this);
 
 		#if editor
 		if(propName == null || ["emitShape", "emitRadius", "emitAngle1", "emitAngle2", "emitWidth", "emitHeight"].indexOf(propName) >= 0)

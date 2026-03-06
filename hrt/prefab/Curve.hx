@@ -248,7 +248,7 @@ class Curve extends Prefab {
 				if(this.children.length == 2) {
 					var c1 = Std.downcast(this.children[0], Curve);
 					var c2 = Std.downcast(this.children[1], Curve);
-					if(c1 != null && c2 != null) 
+					if(c1 != null && c2 != null)
 						return VBlendCurves(c1, c2, blendParam, 1.0);
 				}
 				return VCurve(this);

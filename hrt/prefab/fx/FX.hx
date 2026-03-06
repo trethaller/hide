@@ -208,9 +208,8 @@ class FXAnimation extends h3d.scene.Object {
 		evaluator.parameters.clear();
 		if (params == null)
 			return;
-		for (p in params) {
+		for (p in params)
 			evaluator.parameters[p.name] = p.def;
-		}
 	}
 
 	public function setRandSeed(seed: Int) {
@@ -675,10 +674,10 @@ class FXAnimation extends h3d.scene.Object {
 				return null;
 			anyFound = true;
 			if(uniform && curves.length == 1 && curves[0].name == name) {
-				return Evaluator.optimize(scale != 1.0 ? VMult(curves[0].makeVal(), VConst(scale)) : curves[0].makeVal());
-			}
+			return Evaluator.optimize(scale != 1.0 ? VMult(curves[0].makeVal(), VConst(scale)) : curves[0].makeVal());
+		}
 
-			return Curve.getVectorValue(curves, defVal, scale);
+		return Curve.getVectorValue(curves, defVal, scale);
 		}
 
 		function makeColor(name: String) {

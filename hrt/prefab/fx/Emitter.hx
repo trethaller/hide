@@ -589,7 +589,7 @@ class EmitterObject extends h3d.scene.Object {
 	var emitCount = 0;
 	var emitTarget = 0.0;
 	var curTime = 0.0;
-	var evaluator : Evaluator;
+	public var evaluator : Evaluator;
 	var numInstances = 0;
 	var instanceCounter = 0;
 	var baseEmitterShader : hrt.shader.BaseEmitter = null;
@@ -754,7 +754,7 @@ class EmitterObject extends h3d.scene.Object {
 			}
 			if (p != null) {
 				var fx : hrt.prefab.fx.FX.FXAnimation = cast p;
-				@:privateAccess evaluator.parameters = fx.evaluator.parameters;
+			@:privateAccess evaluator.parameters = fx.evaluator.parameters;
 			}
 		}
 
@@ -1782,7 +1782,9 @@ class Emitter extends Object3D {
 			return;
 		}
 
-		var randIdx = {v: 0};
+		// TODO??
+		var eval = emitterObj.evaluator;
+		eval.randCount = 0;
 		var template : Object3D = cast children.find(
 			c -> EmitterObject.checkEnabled(c) &&
 			(c.name == null || c.name.indexOf("collision") == -1) &&
@@ -1792,7 +1794,7 @@ class Emitter extends Object3D {
 			c.to(hrt.prefab.l3d.Trails) == null);
 
 		inline function makeParam(scope: Prefab, name: String): Value {
-			return EmitterHelper.makeParam(scope, name, PARAMS, props, randIdx);
+			return EmitterHelper.makeParam(scope, name, PARAMS, props, eval);
 		}
 
 		var d = new InstanceDef();
@@ -1891,7 +1893,7 @@ class Emitter extends Object3D {
 			emitterObj.startTime = @:privateAccess scene.renderer.ctx.time;
 		#end
 
-		emitterObj.init(randIdx.v, this);
+		emitterObj.init(eval.randCount, this);
 
 		#if editor
 		if(propName == null || ["emitShape", "emitAngle", "emitRad1", "emitRad2"].indexOf(propName) >= 0)

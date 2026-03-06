@@ -12,13 +12,6 @@ typedef ParamDef = {
 }
 
 class EmitterHelper {
-	public static function makeColor(scope: Prefab, name: String) {
-		var curves = hrt.prefab.Curve.getCurves(scope, name);
-		if(curves == null || curves.length == 0)
-			return null;
-		return hrt.prefab.Curve.getColorValue(curves);
-	}
-
 	public static function randProp(name: String) {
 		return name + "_rand";
 	}
@@ -49,13 +42,13 @@ class EmitterHelper {
 		return val;
 	}
 
-	public static function makeParam(scope: Prefab, name: String, params: Map<String, ParamDef>, props: Dynamic, randIdx: {v: Int}): Value {
+	public static function makeParam(scope: Prefab, name: String, params: Map<String, ParamDef>, props: Dynamic, eval: hrt.prefab.fx.Evaluator): Value {
 		var getCurve = hrt.prefab.Curve.getCurve.bind(scope);
 
 		function makeCompVal(baseProp: Null<Float>, defVal: Float, randProp: Null<Float>, pname: String, suffix: String): Value {
 			var offset = baseProp != null ? baseProp : defVal;
 			var xVal = if (randProp != null && randProp != 0.0)
-				VRandom(randIdx.v++, randProp, offset);
+				VRandom(eval.nextRandIdx(), randProp, offset);
 			else VConst(offset);
 
 			var xCurve = getCurve(pname + suffix);
@@ -64,11 +57,11 @@ class EmitterHelper {
 					var c1 = Std.downcast(xCurve.children[0], Curve);
 					var c2 = Std.downcast(xCurve.children[1], Curve);
 					if(c1 != null && c2 != null)
-						return VRandomBetweenCurves(randIdx.v++, c1, c2);
+						return VRandomBetweenCurves(eval.nextRandIdx(), c1, c2);
 				}
 				if (pname.indexOf("Rotation") >= 0 || pname.indexOf("Offset") >= 0)
-					return VAdd(xVal, xCurve.makeVal());
-				return VMult(xVal, xCurve.makeVal());
+				return VAdd(xVal, xCurve.makeVal());
+			return VMult(xVal, xCurve.makeVal());
 			}
 			return xVal;
 		}
