@@ -119,7 +119,9 @@ class Curve extends Prefab {
 
 	static inline function bezier(c0: Float, c1:Float, c2:Float, c3: Float, t:Float) {
 		var u = 1 - t;
-		return u * u * u * c0 + c1 * 3 * t * u * u + c2 * 3 * t * t * u + t * t * t * c3;
+		var uu = u * u;
+		var tt = t * t;
+		return uu * (u * c0 + 3 * t * c1) + tt * (3 * u * c2 + t * c3);
 	}
 
 	public function findKey(time: Float, tolerance: Float) {
