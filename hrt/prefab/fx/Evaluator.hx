@@ -37,7 +37,7 @@ class Evaluator {
 						}
 						case VCurve(c): switch(y) {
 							case VConst(vb): VCurveScale(c, vb, 0.0);
-							case VAddRandomScale(ri, rs, add): VAddRandCurve(add, ri, rs, c);
+							case VRandom(ri, rs, add): VAddRandCurve(add, ri, rs, c);
 							default: null;
 						}
 						default: null;
@@ -54,7 +54,7 @@ class Evaluator {
 						}
 						case VConst(va): switch(y) {
 							case VConst(vb): VConst(va + vb);
-							case VRandomScale(ri, rs): VAddRandomScale(ri, rs, va);
+							case VRandom(ri, rs, ra): VRandom(ri, rs, ra + va);
 							default: null;
 						}
 						default: null;
@@ -72,7 +72,7 @@ class Evaluator {
 				case VBlend(a, b, p): VBlend(opt(a), opt(b), p);
 				case VParamRemap(a, p): VParamRemap(opt(a), p);
 				case VValueRemap(a, r): VValueRemap(opt(a), opt(r));
-				case VRandom(ri, s): VRandom(ri, opt(s));
+				//case VRandom(ri, s): VRandom(ri, opt(s));
 				case VBool(a): VBool(opt(a));
 				case VInt(a): VInt(opt(a));
 				default: v;
@@ -126,8 +126,8 @@ class Evaluator {
 					var remappedRand = (rand - min) / (max - min);
 					return a + (b - a) * remappedRand;
 				}
-			case VRandom(ridx, scale):
-				return getRandom(pidx, ridx) * getFloatSlow(pidx, scale, time);
+			// case VRandom(ridx, scale):
+			// 	return getRandom(pidx, ridx) * getFloatSlow(pidx, scale, time);
 			case VMult(a, b):
 				return getFloatSlow(pidx, a, time) * getFloatSlow(pidx, b, time);
 			case VAdd(a, b):
@@ -141,8 +141,8 @@ class Evaluator {
 		return switch(val) {
 			case VZero: return 0.0;
 			case VConst(v): v;
-			case VRandomScale(ridx, scale): getRandom(pidx, ridx) * scale;
-			case VAddRandomScale(ridx, scale, add): getRandom(pidx, ridx) * scale + add;
+			// case VRandomScale(ridx, scale): getRandom(pidx, ridx) * scale;
+			case VRandom(ridx, scale, add): getRandom(pidx, ridx) * scale + add;
 			default:
 				getFloatSlow(pidx, val, time);
 		}
@@ -258,9 +258,9 @@ class Evaluator {
 				case VParamRemap(a, param): 'VParamRemap(${rec(a)})';
 				case VValueRemap(v, remap): 'VValueRemap(${rec(v)}, ${rec(remap)})';
 				case VRandomBetweenCurves(idx, c): 'VRandomBetweenCurves';
-				case VRandom(idx, scale): 'VRandom(${rec(scale)})';
-				case VRandomScale(idx, scale): 'VRandomScale';
-				case VAddRandomScale(idx, scale, add): 'VAddRandomScale';
+				// case VRandom(idx, scale): 'VRandom(${rec(scale)})';
+				case VRandom(idx, scale, add): 'VRandom';
+				//case VAddRandomScale(idx, scale, add): 'VAddRandomScale';
 				case VAddRandCurve(cst, ridx, rscale, c): 'VAddRandCurve';
 				case VAdd(a, b): 'VAdd(${rec(a)}, ${rec(b)})';
 				case VMult(a, b): 'VMult(${rec(a)}, ${rec(b)})';

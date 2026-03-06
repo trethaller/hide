@@ -53,23 +53,20 @@ class EmitterHelper {
 		var getCurve = hrt.prefab.Curve.getCurve.bind(scope);
 
 		function makeCompVal(baseProp: Null<Float>, defVal: Float, randProp: Null<Float>, pname: String, suffix: String): Value {
-			var xVal = Value.VConst(baseProp != null ? baseProp : defVal);
-			var randCurve = getCurve(pname + suffix + ":rand");
-			var randVal: Value = VZero;
-			if (randCurve != null)
-				randVal = VRandom(randIdx.v++, VMult(randCurve.makeVal(), VConst(randProp != null ? randProp : 1.0)));
-			else if (randProp != null && randProp != 0.0)
-				randVal = VRandomScale(randIdx.v++, randProp);
+			var offset = baseProp != null ? baseProp : defVal;
+			var xVal = if (randProp != null && randProp != 0.0)
+				VRandom(randIdx.v++, randProp, offset);
+			else VConst(offset);
 
 			var xCurve = getCurve(pname + suffix);
 			if (xCurve != null) {
 				if (xCurve.blendMode == CurveBlendMode.RandomBlend)
 					return VRandomBetweenCurves(randIdx.v++, xCurve);
 				if (pname.indexOf("Rotation") >= 0 || pname.indexOf("Offset") >= 0)
-					return VAdd(VAdd(xVal, randVal), xCurve.makeVal());
-				return VMult(VAdd(xVal, randVal), xCurve.makeVal());
+					return VAdd(xVal, xCurve.makeVal());
+				return VMult(xVal, xCurve.makeVal());
 			}
-			return VAdd(xVal, randVal);
+			return xVal;
 		}
 
 		var baseProp: Dynamic = Reflect.field(props, name);

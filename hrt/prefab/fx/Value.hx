@@ -10,9 +10,7 @@ enum Value {
 	VParamRemap(a: Value, param: String);
 	VValueRemap(v: Value, remap: Value);
 	VRandomBetweenCurves(idx: Int, c: Curve);
-	VRandom(idx: Int, scale: Value);
-	VRandomScale(idx: Int, scale: Float);
-	VAddRandomScale(idx: Int, scale: Float, add: Float);
+	VRandom(idx: Int, scale: Float, add: Float);
 	VAddRandCurve(cst: Float, ridx: Int, rscale: Float, c: Curve);
 	VAdd(a: Value, b: Value);
 	VMult(a: Value, b: Value);
