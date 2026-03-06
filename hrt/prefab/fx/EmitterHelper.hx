@@ -60,8 +60,12 @@ class EmitterHelper {
 
 			var xCurve = getCurve(pname + suffix);
 			if (xCurve != null) {
-				if (xCurve.blendMode == CurveBlendMode.RandomBlend)
-					return VRandomBetweenCurves(randIdx.v++, xCurve);
+				if (xCurve.blendMode == CurveBlendMode.RandomBlend) {
+					var c1 = Std.downcast(xCurve.children[0], Curve);
+					var c2 = Std.downcast(xCurve.children[1], Curve);
+					if(c1 != null && c2 != null)
+						return VRandomBetweenCurves(randIdx.v++, c1, c2);
+				}
 				if (pname.indexOf("Rotation") >= 0 || pname.indexOf("Offset") >= 0)
 					return VAdd(xVal, xCurve.makeVal());
 				return VMult(xVal, xCurve.makeVal());

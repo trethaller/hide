@@ -9,7 +9,7 @@ enum Value {
 	VBlendCurves(a: Curve, b: Curve, blendVar: String);
 	VParamRemap(a: Value, param: String);
 	VValueRemap(v: Value, remap: Value);
-	VRandomBetweenCurves(idx: Int, c: Curve);
+	VRandomBetweenCurves(idx: Int, a: Curve, b: Curve);
 	VRandom(idx: Int, scale: Float, add: Float);
 	VAddRandCurve(cst: Float, ridx: Int, rscale: Float, c: Curve);
 	VAdd(a: Value, b: Value);

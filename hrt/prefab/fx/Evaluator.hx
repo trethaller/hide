@@ -17,13 +17,6 @@ class Evaluator {
 				var r = fn(a, b);
 				return r != null ? r : fn(b, a);
 			}
-			function optScale(base: Value, s: Float, ?def: Value) : Value {
-				if(s == 0.0)
-					return VZero;
-				if(s == 1.0)
-					return base;
-				return def != null ? def : v;
-			}
 			return switch(v) {
 				case VConst(0.0): VZero;
 				case VMult(a, b):
@@ -109,10 +102,8 @@ class Evaluator {
 			case VValueRemap(a, remap):
 				var time = getFloatSlow(pidx, remap, time);
 				return getFloatSlow(pidx, a, time);
-			case VRandomBetweenCurves(ridx, c):
+			case VRandomBetweenCurves(ridx, c1, c2):
 				{
-					var c1 = Std.downcast(c.children[0], Curve);
-					var c2 = Std.downcast(c.children[1], Curve);
 					var a = c1.getVal(time);
 					var b = c2.getVal(time);
 
@@ -254,7 +245,7 @@ class Evaluator {
 				case VBlendCurves(a, b, blendVar): 'VBlendCurves';
 				case VParamRemap(a, param): 'VParamRemap(${rec(a)})';
 				case VValueRemap(v, remap): 'VValueRemap(${rec(v)}, ${rec(remap)})';
-				case VRandomBetweenCurves(idx, c): 'VRandomBetweenCurves';
+				case VRandomBetweenCurves(idx, a, b): 'VRandomBetweenCurves';
 				// case VRandom(idx, scale): 'VRandom(${rec(scale)})';
 				case VRandom(idx, scale, add): 'VRandom';
 				//case VAddRandomScale(idx, scale, add): 'VAddRandomScale';
