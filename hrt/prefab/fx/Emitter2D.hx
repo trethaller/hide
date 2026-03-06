@@ -82,20 +82,20 @@ class Particle2DInstance extends h2d.SpriteBatch.BatchElement {
 
 		// POSITION
 		if (def.localOffset != VZero) {
-			evaluator.getVector2(idx, def.localOffset, t, tmpVec);
+			evaluator.getVector2(def.localOffset, t, tmpVec);
 			m.initTranslate(tmpVec.x, tmpVec.y);
 		}
 
 		// ROTATION
 		if (def.rotation != VZero) {
-			var r = evaluator.getFloat(idx, def.rotation, t) * Math.PI / 180.0;
+			var r = evaluator.getFloat(def.rotation, t) * Math.PI / 180.0;
 			m.rotate(r);
 		}
 
 		// SCALE
-		evaluator.getVector2(idx, def.stretch, t, tmpVec);
-		tmpVec *= evaluator.getFloat(idx, def.scale, t);
-		tmpVec *= evaluator.getFloat(idx, def.scaleOverTime, emitter.curTime);
+		evaluator.getVector2(def.stretch, t, tmpVec);
+		tmpVec *= evaluator.getFloat(def.scale, t);
+		tmpVec *= evaluator.getFloat(def.scaleOverTime, emitter.curTime);
 		m.scale(tmpVec.x, tmpVec.y);
 	}
 
@@ -153,20 +153,20 @@ class Particle2DInstance extends h2d.SpriteBatch.BatchElement {
 					m.translate(posX, posY);
 			}
 
-			// START LOCAL SPEED
-			evaluator.getVector2(idx, emitter.startSpeed, emitter.curTime, tmpVec);
-			tmpVec.transform2x2(m);
-			speed += tmpVec;
+		// START LOCAL SPEED
+		evaluator.getVector2(emitter.startSpeed, emitter.curTime, tmpVec);
+		tmpVec.transform2x2(m);
+		speed += tmpVec;
 
-			// START WORLD SPEED
-			evaluator.getVector2(idx, emitter.startWorldSpeed, emitter.curTime, tmpVec);
-			tmpVec.transform2x2(emitter.invTransform);
-			speed += tmpVec;
+		// START WORLD SPEED
+		evaluator.getVector2(emitter.startWorldSpeed, emitter.curTime, tmpVec);
+		tmpVec.transform2x2(emitter.invTransform);
+		speed += tmpVec;
 		}
 
 		// ACCELERATION
 		if (def.acceleration != VZero) {
-			evaluator.getVector2(idx, def.acceleration, t, tmpVec);
+			evaluator.getVector2(def.acceleration, t, tmpVec);
 			tmpVec.scale(dt);
 			tmpVec.transform2x2(m);
 			speed += tmpVec;
@@ -174,7 +174,7 @@ class Particle2DInstance extends h2d.SpriteBatch.BatchElement {
 
 		// WORLD ACCELERATION
 		if (def.worldAcceleration != VZero) {
-			evaluator.getVector2(idx, def.worldAcceleration, t, tmpVec);
+			evaluator.getVector2(def.worldAcceleration, t, tmpVec);
 			tmpVec.scale(dt);
 			tmpVec.transform2x2(emitter.invTransform);
 			speed += tmpVec;
@@ -184,14 +184,14 @@ class Particle2DInstance extends h2d.SpriteBatch.BatchElement {
 
 		// SPEED
 		if (def.localSpeed != VZero) {
-			evaluator.getVector2(idx, def.localSpeed, t, tmpVec);
+			evaluator.getVector2(def.localSpeed, t, tmpVec);
 			tmpVec.transform2x2(m);
 			tmpSpeed += tmpVec;
 		}
 
 		// DAMPEN
 		if (def.dampen != VZero) {
-			var dampen = evaluator.getFloat(idx, def.dampen, t);
+			var dampen = evaluator.getFloat(def.dampen, t);
 			var scale = Math.exp(dampen* -dt);
 			speed.scale(scale);
 		}
@@ -199,14 +199,14 @@ class Particle2DInstance extends h2d.SpriteBatch.BatchElement {
 
 		// WORLD SPEED
 		if (def.worldSpeed != VZero) {
-			evaluator.getVector2(idx, def.worldSpeed, t, tmpVec);
+			evaluator.getVector2(def.worldSpeed, t, tmpVec);
 			tmpVec.transform2x2(emitter.invTransform);
 			tmpSpeed += tmpVec;
 		}
 
 		// MAX VELOCITY
 		if (def.maxVelocity != VZero) {
-			var maxVel = evaluator.getFloat(idx, def.maxVelocity, t);
+			var maxVel = evaluator.getFloat(def.maxVelocity, t);
 			var curVelSq = tmpSpeed.lengthSq();
 			if (maxVel * maxVel < curVelSq) {
 				tmpSpeed.normalize();
@@ -217,9 +217,9 @@ class Particle2DInstance extends h2d.SpriteBatch.BatchElement {
 		m.translate(tmpSpeed.x * dt, tmpSpeed.y * dt);
 
 		if (def.orbitSpeed != VZero) {
-			var orbitSpeed = evaluator.getFloat(idx, def.orbitSpeed, t);
+			var orbitSpeed = evaluator.getFloat(def.orbitSpeed, t);
 
-			var factorOverTime = evaluator.getFloat(idx, def.orbitSpeedOverTime, emitter.curTime);
+			var factorOverTime = evaluator.getFloat(def.orbitSpeedOverTime, emitter.curTime);
 			orbitSpeed *= factorOverTime;
 
 			var prevPos = m.getPosition().clone();
@@ -251,8 +251,6 @@ class Emitter2DObject extends h2d.Object {
 	var curTime = 0.;
 	var countToEmit = 0.;
 	var totalBurstCount = 0;
-	var randomValues : Array<Float>;
-	var randSlots : Int;
 	var instanceCounter = 0;
 	var animatedTexShader : h3d.shader.AnimatedTexture = null;
 
@@ -308,13 +306,12 @@ class Emitter2DObject extends h2d.Object {
 
 		batch = new h2d.SpriteBatch(h2d.Tile.fromColor(0xFF00FF, 10, 10), this);
 		batch.hasRotationScale = true;
-		evaluator = new Evaluator([0], 1);
 		rand = new hxd.Rand(seed);
+		evaluator = new Evaluator();
 	}
 
-	public function init(randSlots: Int, prefab: Emitter2D) {
-		var randomValues = [for(_ in 0...(maxCount * randSlots)) rand.srand()];
-		evaluator = new Evaluator(randomValues, randSlots);
+	public function init(prefab: Emitter2D) {
+		evaluator = new Evaluator();
 
 		if (animatedTexShader != null)
 			batch.removeShader(animatedTexShader);
@@ -427,10 +424,6 @@ class Emitter2DObject extends h2d.Object {
 		instanceCounter = 0;
 
 		rand.init(seed);
-		if (randomValues != null) {
-			for(i in 0...randomValues.length)
-				randomValues[i] = rand.srand();
-		}
 	}
 
 	function getTile() {
@@ -636,7 +629,6 @@ class Emitter2D extends Object2D {
 
 		var emitterObj = Std.downcast(local2d, Emitter2DObject);
 		var eval = emitterObj.evaluator;
-		eval.randCount = 0;
 
 		inline function makeParam(scope: Prefab, name: String): Value {
 			return EmitterHelper.makeParam(scope, name, PARAMS, props, eval);
@@ -702,7 +694,7 @@ class Emitter2D extends Object2D {
 		emitterObj.startSpeed			=	makeParam(this, "instStartSpeed");
 		emitterObj.startWorldSpeed 		= 	makeParam(this, "instStartWorldSpeed");
 
-		emitterObj.init(eval.randCount, this);
+		emitterObj.init(this);
 
 		#if editor
 		if(propName == null || ["emitShape", "emitRadius", "emitAngle1", "emitAngle2", "emitWidth", "emitHeight"].indexOf(propName) >= 0)
@@ -863,12 +855,12 @@ class Emitter2D extends Object2D {
 		graphics.lineStyle(1, 0xFFFFFF, 1);
 		switch(e.emitShape) {
 			case Circle:
-				var radA1 = e.evaluator.getFloat(0, e.emitAngle1, 0) * hxd.Math.PI / 180;
-				var radA2 = e.evaluator.getFloat(0, e.emitAngle2, 0) * hxd.Math.PI / 180;
-				graphics.drawPie(0, 0, e.evaluator.getFloat(0, e.emitRadius, 0), radA1, radA2 - radA1);
-			case Rectangle:
-				var width = e.evaluator.getFloat(0, e.emitWidth, 0);
-				var height = e.evaluator.getFloat(0, e.emitHeight, 0);
+			var radA1 = e.evaluator.getFloat(e.emitAngle1, 0) * hxd.Math.PI / 180;
+			var radA2 = e.evaluator.getFloat(e.emitAngle2, 0) * hxd.Math.PI / 180;
+			graphics.drawPie(0, 0, e.evaluator.getFloat(e.emitRadius, 0), radA1, radA2 - radA1);
+		case Rectangle:
+			var width = e.evaluator.getFloat(e.emitWidth, 0);
+			var height = e.evaluator.getFloat(e.emitHeight, 0);
 				graphics.drawRect(-width / 2, -height / 2, width, height);
 		}
 	}

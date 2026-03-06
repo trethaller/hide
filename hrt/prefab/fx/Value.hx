@@ -9,10 +9,10 @@ enum Value {
 	VBlendCurves(a: Curve, b: Curve, blendVar: String, scale: Float);
 	VParamRemap(a: Value, param: String);
 	VValueRemap(v: Value, remap: Value);
-	VRandomBetweenCurves(idx: Int, a: Curve, b: Curve);
-	VRandom(idx: Int, scale: Float, add: Float);
-	VMultRandCurve(ridx: Int, rscale: Float, cst: Float, c: Curve);
-	VAddRandCurve(ridx: Int, rscale: Float, cst: Float, c: Curve);
+	VRandomBetweenCurves(a: Curve, b: Curve);
+	VRandom(scale: Float, add: Float);
+	VMultRandCurve(rscale: Float, cst: Float, c: Curve);
+	VAddRandCurve(rscale: Float, cst: Float, c: Curve);
 	VAdd(a: Value, b: Value);
 	VMult(a: Value, b: Value);
 	VVector(x: Value, y: Value, z: Value, ?w: Value);

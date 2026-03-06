@@ -55,6 +55,8 @@ class KeyData {
 	public var nextHandleDv : Float = 0;
 	public var prevHandleDt : Float = 0;
 	public var prevHandleDv : Float = 0;
+
+	public function new() {}
 }
 
 typedef KeyDataArray = #if (hl_ver >= version("1.14.0")) hl.CArray<KeyData> #else Array<KeyData> #end;

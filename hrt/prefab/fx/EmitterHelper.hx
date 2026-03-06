@@ -48,7 +48,7 @@ class EmitterHelper {
 		function makeCompVal(baseProp: Null<Float>, defVal: Float, randProp: Null<Float>, pname: String, suffix: String): Value {
 			var offset = baseProp != null ? baseProp : defVal;
 			var xVal = if (randProp != null && randProp != 0.0)
-				VRandom(eval.nextRandIdx(), randProp, offset);
+				VRandom(randProp, offset);
 			else VConst(offset);
 
 			var xCurve = getCurve(pname + suffix);
@@ -57,7 +57,7 @@ class EmitterHelper {
 					var c1 = Std.downcast(xCurve.children[0], Curve);
 					var c2 = Std.downcast(xCurve.children[1], Curve);
 					if(c1 != null && c2 != null)
-						return VRandomBetweenCurves(eval.nextRandIdx(), c1, c2);
+						return VRandomBetweenCurves(c1, c2);
 				}
 				if (pname.indexOf("Rotation") >= 0 || pname.indexOf("Offset") >= 0)
 				return VAdd(xVal, xCurve.makeVal());

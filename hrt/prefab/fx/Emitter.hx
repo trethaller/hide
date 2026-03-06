@@ -290,22 +290,22 @@ class ParticleInstance {
 
 		//SCALE
 		var def = emitter.instDef;
-		var scaleVec = evaluator.getVector(idx, def.stretch, t, tmpScale);
-		scaleVec.scale3(evaluator.getFloat(idx, def.scale, t));
-		scaleVec.scale3(evaluator.getFloat(idx, def.scaleOverTime, emitter.curTime));
+		var scaleVec = evaluator.getVector(def.stretch, t, tmpScale);
+		scaleVec.scale3(evaluator.getFloat(def.scale, t));
+		scaleVec.scale3(evaluator.getFloat(def.scaleOverTime, emitter.curTime));
 		localMat.initScale(scaleVec.x, scaleVec.y, scaleVec.z);
 
 
 		// ROTATION
 		if(def.rotation != VZero) {
-			var rot = evaluator.getVector(idx, def.rotation, t, tmpRot);
+			var rot = evaluator.getVector(def.rotation, t, tmpRot);
 			rot.scale3(Math.PI / 180.0);
 			localMat.rotate(rot.x, rot.y, rot.z);
 		}
 
 		//OFFSET
 		if(def.localOffset != VZero) {
-			var offset = evaluator.getVector(idx, def.localOffset, t, tmpOffset);
+			var offset = evaluator.getVector(def.localOffset, t, tmpOffset);
 			localMat.tx += offset.x;
 			localMat.ty += offset.y;
 			localMat.tz += offset.z;
@@ -329,18 +329,18 @@ class ParticleInstance {
 
 		if( life == 0 ) {
 			// START LOCAL SPEED
-			evaluator.getVector(idx, emitter.startSpeed, emitter.curTime, tmpSpeedAccumulation);
+			evaluator.getVector(emitter.startSpeed, emitter.curTime, tmpSpeedAccumulation);
 			tmpSpeedAccumulation.transform3x3(emitOrientation);
 			add(speedAccumulation, tmpSpeedAccumulation);
 			// START WORLD SPEED
-			evaluator.getVector(idx, emitter.startWorldSpeed, emitter.curTime, tmpSpeedAccumulation);
+			evaluator.getVector(emitter.startWorldSpeed, emitter.curTime, tmpSpeedAccumulation);
 			tmpSpeedAccumulation.transform3x3(emitter.invTransform);
 			add(speedAccumulation, tmpSpeedAccumulation);
 		}
 
 		// ACCELERATION
 		if(def.acceleration != VZero) {
-			evaluator.getVector(idx, def.acceleration, t, tmpSpeedAccumulation);
+			evaluator.getVector(def.acceleration, t, tmpSpeedAccumulation);
 			tmpSpeedAccumulation.scale3(dt);
 			tmpSpeedAccumulation.transform3x3(emitOrientation);
 			add(speedAccumulation, tmpSpeedAccumulation);
@@ -348,7 +348,7 @@ class ParticleInstance {
 
 		// WORLD ACCELERATION
 		if(def.worldAcceleration != VZero) {
-			evaluator.getVector(idx, def.worldAcceleration, t, tmpSpeedAccumulation);
+			evaluator.getVector(def.worldAcceleration, t, tmpSpeedAccumulation);
 			tmpSpeedAccumulation.scale3(dt);
 			if(emitter.simulationSpace == Local)
 				tmpSpeedAccumulation.transform3x3(emitter.invTransform);
@@ -361,14 +361,14 @@ class ParticleInstance {
 
 		// SPEED
 		if(def.localSpeed != VZero) {
-			evaluator.getVector(idx, def.localSpeed, t, tmpLocalSpeed);
+			evaluator.getVector(def.localSpeed, t, tmpLocalSpeed);
 			tmpLocalSpeed.transform3x3(emitOrientation);
 			add(tmpSpeed, tmpLocalSpeed);
 		}
 
 		// DAMPEN
 		if (def.dampen != VZero) {
-			var dampen = evaluator.getFloat(idx, def.dampen, t);
+			var dampen = evaluator.getFloat(def.dampen, t);
 			var scale = Math.exp(dampen* -dt);
 			speedAccumulation.scale(scale);
 		}
@@ -376,7 +376,7 @@ class ParticleInstance {
 
 		// WORLD SPEED
 		if(def.worldSpeed != VZero) {
-			evaluator.getVector(idx, def.worldSpeed, t, tmpWorldSpeed);
+			evaluator.getVector(def.worldSpeed, t, tmpWorldSpeed);
 			if(emitter.simulationSpace == Local)
 				tmpWorldSpeed.transform3x3(emitter.invTransform);
 			add(tmpSpeed, tmpWorldSpeed);
@@ -384,7 +384,7 @@ class ParticleInstance {
 
 		// MAX VELOCITY
 		if (def.maxVelocity != VZero) {
-			var maxVel = evaluator.getFloat(idx, def.maxVelocity, t);
+			var maxVel = evaluator.getFloat(def.maxVelocity, t);
 			var curVelSq = tmpSpeed.lengthSq();
 			if (maxVel * maxVel < curVelSq) {
 				tmpSpeed.normalize();
@@ -400,7 +400,7 @@ class ParticleInstance {
 
 		// STRETCH VELOCITY
 		if (def.stretchVelocity != VZero) {
-			var s = evaluator.getFloat(idx, def.stretchVelocity, t);
+			var s = evaluator.getFloat(def.stretchVelocity, t);
 			var up = tmpCamVec2;
 			up.set(absPos._11, absPos._12, absPos._13);
 			var sx = hxd.Math.abs(tmpSpeed.dot(up));
@@ -422,9 +422,9 @@ class ParticleInstance {
 		z += tmpSpeed.z * dt;
 
 		if(def.orbitSpeed != VZero) {
-			evaluator.getVector(idx, def.orbitSpeed, t, tmpLocalSpeed);
+			evaluator.getVector(def.orbitSpeed, t, tmpLocalSpeed);
 
-			var factorOverTime = evaluator.getFloat(idx, def.orbitSpeedOverTime, emitter.curTime);
+			var factorOverTime = evaluator.getFloat(def.orbitSpeedOverTime, emitter.curTime);
 			tmpLocalSpeed.scale3(factorOverTime);
 
 			tmpMat.initRotation(tmpLocalSpeed.x * dt, tmpLocalSpeed.y * dt, tmpLocalSpeed.z * dt);
@@ -598,8 +598,6 @@ class EmitterObject extends h3d.scene.Object {
 
 	var parentTransform = new h3d.Matrix();
 	var baseEmitMat : h3d.Matrix;
-	var randomValues : Array<Float>;
-	var randSlots : Int;
 
 	public function new(?parent) {
 		super(parent);
@@ -619,9 +617,8 @@ class EmitterObject extends h3d.scene.Object {
 		prefab.updateInstance();
 	}
 
-	function init(randSlots: Int, prefab: Emitter) {
+	function init(prefab: Emitter) {
 		this.emitterPrefab = prefab;
-		this.randSlots = randSlots;
 
 		updateParentNonEmitter();
 
@@ -744,8 +741,7 @@ class EmitterObject extends h3d.scene.Object {
 
 		particles = #if (hl_ver >= version("1.14.0")) hl.CArray.alloc(ParticleInstance, maxCount) #else [for(i in 0...maxCount) new ParticleInstance()] #end;
 		particlesCount = maxCount;
-		randomValues = [for(i in 0...(maxCount * randSlots)) 0];
-		evaluator = new Evaluator(randomValues, randSlots);
+		evaluator = new Evaluator();
 
 		{
 			var p = parent;
@@ -800,11 +796,6 @@ class EmitterObject extends h3d.scene.Object {
 		emitCount = 0;
 		emitTarget = 0;
 		listHead = null;
-
-		if(randomValues != null) {
-			for(i in 0...randomValues.length)
-				randomValues[i] = random.srand();
-		}
 
 		if(particles != null) {
 			for(i in 0...particlesCount) {
@@ -1416,6 +1407,7 @@ class EmitterObject extends h3d.scene.Object {
 		var i = 0;
 		while(i < numInstances) {
 			var p = particles[i];
+			evaluator.setSeed(randomSeed + i);
 			if(p.life > p.lifeTime) {
 				if (p.trail == null || p.trail.generation != p.trailGeneration) {
 					// SUB EMITTER
@@ -1782,9 +1774,7 @@ class Emitter extends Object3D {
 			return;
 		}
 
-		// TODO??
 		var eval = emitterObj.evaluator;
-		eval.randCount = 0;
 		var template : Object3D = cast children.find(
 			c -> EmitterObject.checkEnabled(c) &&
 			(c.name == null || c.name.indexOf("collision") == -1) &&
@@ -1893,7 +1883,7 @@ class Emitter extends Object3D {
 			emitterObj.startTime = @:privateAccess scene.renderer.ctx.time;
 		#end
 
-		emitterObj.init(eval.randCount, this);
+		emitterObj.init(this);
 
 		#if editor
 		if(propName == null || ["emitShape", "emitAngle", "emitRad1", "emitRad2"].indexOf(propName) >= 0)
