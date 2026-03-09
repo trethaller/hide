@@ -4,6 +4,7 @@ import hrt.prefab.l3d.Polygon;
 import hrt.prefab.Curve;
 import hrt.prefab.fx.Value;
 import hrt.prefab.fx.Evaluator;
+import hrt.prefab.fx.Evaluator.FastValue;
 
 #if editor
 import hide.prefab.HideProps;
@@ -86,6 +87,113 @@ class InstanceDef {
 	var dampen: Value;
 	var maxVelocity : Value;
 	public function new() { }
+}
+
+
+class EmitterEvaluator extends Evaluator {
+	public var localSpeed: FastRef;
+	public var worldSpeed: FastRef;
+	public var orbitSpeed: FastRef;
+	public var orbitSpeedOverTime: FastRef;
+	public var acceleration: FastRef;
+	public var worldAcceleration: FastRef;
+	public var localOffset: FastRef;
+	public var scale: FastRef;
+	public var scaleOverTime: FastRef;
+	public var stretch: FastRef;
+	public var stretchVelocity: FastRef;
+	public var rotation: FastRef;
+	public var dampen: FastRef;
+	public var maxVelocity : FastRef;
+	public var startSpeed: FastRef;
+	public var startWorldSpeed: FastRef;
+	public var emitter: EmitterObject;
+
+	public function new(emitter: EmitterObject, def: InstanceDef) {
+		super();
+		this.emitter = emitter;
+		localSpeed = addFast(def.localSpeed);
+		worldSpeed = addFast(def.worldSpeed);
+		orbitSpeed = addFast(def.orbitSpeed);
+		orbitSpeedOverTime = addFast(def.orbitSpeedOverTime);
+		acceleration = addFast(def.acceleration);
+		worldAcceleration = addFast(def.worldAcceleration);
+		localOffset = addFast(def.localOffset);
+		scale = addFast(def.scale, false);
+		scaleOverTime = addFast(def.scaleOverTime, false);
+		stretch = addFast(def.stretch, false);
+		stretchVelocity = addFast(def.stretchVelocity);
+		rotation = addFast(def.rotation);
+		dampen = addFast(def.dampen);
+		maxVelocity = addFast(def.maxVelocity);
+		startSpeed = addFast(emitter.startSpeed);
+		startWorldSpeed = addFast(emitter.startWorldSpeed);
+		buildFast();
+	}
+
+	public function getStartSpeed(vec: h3d.Vector4) {
+		getFastVec(startSpeed, emitter.curTime, vec);
+	}
+
+	public function getStartWorldSpeed(vec: h3d.Vector4) {
+		getFastVec(startWorldSpeed, emitter.curTime, vec);
+	}
+
+	public function getAcceleration(t: Float, vec: h3d.Vector4) {
+		getFastVec(acceleration, t, vec);
+	}
+
+	public function getWorldAcceleration(t: Float, vec: h3d.Vector4) {
+		getFastVec(worldAcceleration, t, vec);
+	}
+
+	public inline function getLocalSpeed(t: Float, vec: h3d.Vector4) {
+		getFastVec(localSpeed, t, vec);
+	}
+
+	public inline function getWorldSpeed(t: Float, vec: h3d.Vector4) {
+		getFastVec(worldSpeed, t, vec);
+	}
+
+	public inline function getOrbitSpeed(t: Float, vec: h3d.Vector4) {
+		getFastVec(orbitSpeed, t, vec);
+	}
+
+	public inline function getStretch(t: Float, vec: h3d.Vector4) {
+		getFastVec(stretch, t, vec);
+	}
+
+	public inline function getRotation(t: Float, vec: h3d.Vector4) {
+		getFastVec(rotation, t, vec);
+	}
+
+	public inline function getLocalOffset(t: Float, vec: h3d.Vector4) {
+		getFastVec(localOffset, t, vec);
+	}
+
+	public inline function getScale(t: Float) : Float {
+		return getFast(scale, t);
+	}
+
+	public inline function getScaleOverTime(t: Float) : Float {
+		return getFast(scaleOverTime, t);
+	}
+
+	public inline function getOrbitSpeedOverTime(t: Float) : Float {
+		return getFast(orbitSpeedOverTime, t);
+	}
+
+	public inline function getDampen(t: Float) : Float {
+		return getFast(dampen, t);
+	}
+
+	public inline function getMaxVelocity(t: Float) : Float {
+		return getFast(maxVelocity, t);
+	}
+
+	public inline function getStretchVelocity(t: Float) : Float {
+		return getFast(stretchVelocity, t);
+	}
 }
 
 typedef PartArray = #if (hl_ver >= version("1.14.0")) hl.CArray<ParticleInstance> #else Array<ParticleInstance> #end;
@@ -286,29 +394,27 @@ class ParticleInstance {
 
 		var t = hxd.Math.clamp(life / lifeTime, 0.0, 1.0);
 
-		var evaluator = emitter.evaluator;
+		var eval = @:privateAccess emitter.evaluator;
 
 		//SCALE
-		var def = emitter.instDef;
-		var scaleVec = evaluator.getVector(def.stretch, t, tmpScale);
-		scaleVec.scale3(evaluator.getFloat(def.scale, t));
-		scaleVec.scale3(evaluator.getFloat(def.scaleOverTime, emitter.curTime));
-		localMat.initScale(scaleVec.x, scaleVec.y, scaleVec.z);
-
+		eval.getStretch(t, tmpScale);
+		tmpScale.scale3(eval.getScale(t));
+		tmpScale.scale3(eval.getScaleOverTime(emitter.curTime));
+		localMat.initScale(tmpScale.x, tmpScale.y, tmpScale.z);
 
 		// ROTATION
-		if(def.rotation != VZero) {
-			var rot = evaluator.getVector(def.rotation, t, tmpRot);
-			rot.scale3(Math.PI / 180.0);
-			localMat.rotate(rot.x, rot.y, rot.z);
+		if(eval.rotation) {
+			eval.getRotation(t, tmpRot);
+			tmpRot.scale3(Math.PI / 180.0);
+			localMat.rotate(tmpRot.x, tmpRot.y, tmpRot.z);
 		}
 
 		//OFFSET
-		if(def.localOffset != VZero) {
-			var offset = evaluator.getVector(def.localOffset, t, tmpOffset);
-			localMat.tx += offset.x;
-			localMat.ty += offset.y;
-			localMat.tz += offset.z;
+		if(eval.localOffset) {
+			eval.getLocalOffset(t, tmpOffset);
+			localMat.tx += tmpOffset.x;
+			localMat.ty += tmpOffset.y;
+			localMat.tz += tmpOffset.z;
 		}
 
 		if(emitter.baseEmitMat != null)
@@ -322,33 +428,36 @@ class ParticleInstance {
 		var t = hxd.Math.clamp(life / lifeTime, 0.0, 1.0);
 		tmpSpeed.set(0,0,0);
 
-		var def = emitter.instDef;
-		var evaluator = emitter.evaluator;
+		var eval = @:privateAccess emitter.evaluator;
 		var emitOrientation = emitOrientation.toMatrix();
 		var speedAccumulation = this.speedAccumulation.toVector();
 
 		if( life == 0 ) {
-			// START LOCAL SPEED
-			evaluator.getVector(emitter.startSpeed, emitter.curTime, tmpSpeedAccumulation);
-			tmpSpeedAccumulation.transform3x3(emitOrientation);
-			add(speedAccumulation, tmpSpeedAccumulation);
+			if(eval.startSpeed) {
+				eval.getStartSpeed(tmpSpeedAccumulation);
+				tmpSpeedAccumulation.transform3x3(emitOrientation);
+				add(speedAccumulation, tmpSpeedAccumulation);
+			}
+
 			// START WORLD SPEED
-			evaluator.getVector(emitter.startWorldSpeed, emitter.curTime, tmpSpeedAccumulation);
-			tmpSpeedAccumulation.transform3x3(emitter.invTransform);
-			add(speedAccumulation, tmpSpeedAccumulation);
+			if(eval.startWorldSpeed) {
+				eval.getStartWorldSpeed(tmpSpeedAccumulation);
+				tmpSpeedAccumulation.transform3x3(emitter.invTransform);
+				add(speedAccumulation, tmpSpeedAccumulation);
+			}
 		}
 
 		// ACCELERATION
-		if(def.acceleration != VZero) {
-			evaluator.getVector(def.acceleration, t, tmpSpeedAccumulation);
+		if(eval.acceleration) {
+			eval.getAcceleration(t, tmpSpeedAccumulation);
 			tmpSpeedAccumulation.scale3(dt);
 			tmpSpeedAccumulation.transform3x3(emitOrientation);
 			add(speedAccumulation, tmpSpeedAccumulation);
 		}
 
 		// WORLD ACCELERATION
-		if(def.worldAcceleration != VZero) {
-			evaluator.getVector(def.worldAcceleration, t, tmpSpeedAccumulation);
+		if(eval.worldAcceleration) {
+			eval.getWorldAcceleration(t, tmpSpeedAccumulation);
 			tmpSpeedAccumulation.scale3(dt);
 			if(emitter.simulationSpace == Local)
 				tmpSpeedAccumulation.transform3x3(emitter.invTransform);
@@ -360,31 +469,30 @@ class ParticleInstance {
 		tmpSpeed.z += speedAccumulation.z;
 
 		// SPEED
-		if(def.localSpeed != VZero) {
-			evaluator.getVector(def.localSpeed, t, tmpLocalSpeed);
+		if(eval.localSpeed) {
+			eval.getLocalSpeed(t, tmpLocalSpeed);
 			tmpLocalSpeed.transform3x3(emitOrientation);
 			add(tmpSpeed, tmpLocalSpeed);
 		}
 
 		// DAMPEN
-		if (def.dampen != VZero) {
-			var dampen = evaluator.getFloat(def.dampen, t);
+		if (eval.dampen) {
+			var dampen = eval.getDampen(t);
 			var scale = Math.exp(dampen* -dt);
 			speedAccumulation.scale(scale);
 		}
 
-
 		// WORLD SPEED
-		if(def.worldSpeed != VZero) {
-			evaluator.getVector(def.worldSpeed, t, tmpWorldSpeed);
+		if(eval.worldSpeed) {
+			eval.getWorldSpeed(t, tmpWorldSpeed);
 			if(emitter.simulationSpace == Local)
 				tmpWorldSpeed.transform3x3(emitter.invTransform);
 			add(tmpSpeed, tmpWorldSpeed);
 		}
 
 		// MAX VELOCITY
-		if (def.maxVelocity != VZero) {
-			var maxVel = evaluator.getFloat(def.maxVelocity, t);
+		if (eval.maxVelocity) {
+			var maxVel = eval.getMaxVelocity(t);
 			var curVelSq = tmpSpeed.lengthSq();
 			if (maxVel * maxVel < curVelSq) {
 				tmpSpeed.normalize();
@@ -399,8 +507,8 @@ class ParticleInstance {
 		}
 
 		// STRETCH VELOCITY
-		if (def.stretchVelocity != VZero) {
-			var s = evaluator.getFloat(def.stretchVelocity, t);
+		if (eval.stretchVelocity) {
+			var s = eval.getStretchVelocity(t);
 			var up = tmpCamVec2;
 			up.set(absPos._11, absPos._12, absPos._13);
 			var sx = hxd.Math.abs(tmpSpeed.dot(up));
@@ -421,10 +529,10 @@ class ParticleInstance {
 		y += tmpSpeed.y * dt;
 		z += tmpSpeed.z * dt;
 
-		if(def.orbitSpeed != VZero) {
-			evaluator.getVector(def.orbitSpeed, t, tmpLocalSpeed);
+		if(eval.orbitSpeed) {
+			eval.getOrbitSpeed(t, tmpLocalSpeed);
 
-			var factorOverTime = evaluator.getFloat(def.orbitSpeedOverTime, emitter.curTime);
+			var factorOverTime = eval.getOrbitSpeedOverTime(emitter.curTime);
 			tmpLocalSpeed.scale3(factorOverTime);
 
 			tmpMat.initRotation(tmpLocalSpeed.x * dt, tmpLocalSpeed.y * dt, tmpLocalSpeed.z * dt);
@@ -480,7 +588,7 @@ class ParticleInstance {
 @:allow(hrt.prefab.fx.Emitter)
 class EmitterObject extends h3d.scene.Object {
 
-	public var instDef : InstanceDef;
+	var instDef : InstanceDef;
 
 	public var particles : PartArray;
 	public var particlesCount : Int;
@@ -589,7 +697,7 @@ class EmitterObject extends h3d.scene.Object {
 	var emitCount = 0;
 	var emitTarget = 0.0;
 	var curTime = 0.0;
-	public var evaluator : Evaluator;
+	var evaluator : EmitterEvaluator;
 	var numInstances = 0;
 	var instanceCounter = 0;
 	var baseEmitterShader : hrt.shader.BaseEmitter = null;
@@ -741,7 +849,7 @@ class EmitterObject extends h3d.scene.Object {
 
 		particles = #if (hl_ver >= version("1.14.0")) hl.CArray.alloc(ParticleInstance, maxCount) #else [for(i in 0...maxCount) new ParticleInstance()] #end;
 		particlesCount = maxCount;
-		evaluator = new Evaluator();
+		evaluator = new EmitterEvaluator(this, instDef);
 
 		{
 			var p = parent;

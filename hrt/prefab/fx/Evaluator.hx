@@ -11,22 +11,44 @@ private enum abstract FastValueType(Int) from Int to Int {
 	var VBlendCurves = 6;
 	var VAddRandCurve = 7;
 	var VRandomBetweenCurves = 8;
-	var VSlow;
+	var VSlow = 9;
 }
 
-class FastValue {
+@:publicFields @:struct class FastValue {
 	var type : FastValueType;
-	var idx : Int;
 	var scale : Float;
 	var offset : Float;
 	var curve1 : Curve;
 	var curve2 : Curve;
 	var slow : Value;
+	public function new(t: FastValueType) {
+		this.type = t;
+	}
+}
+
+typedef FastValues = #if hl hl.CArray<FastValue> #else Array<FastValue> #end;
+
+abstract FastRef(Int) to Int {
+	public inline function new(i : Int) {
+		this = i;
+	}
+
+	inline public function next() : FastRef {
+		return new FastRef(this + 1);
+	}
+
+	@:to inline function toBool() : Bool {
+		return this >= 0;
+	}
 }
 
 class Evaluator {
 	public var rnd: hxd.Rand;
 	public var parameters: Map<String, Float> = [];
+
+	var fastValues : FastValues;
+	var fastCount : Int;
+	var pendingValues : Array<Value> = [];
 
 	public function new() {
 		this.rnd = new hxd.Rand(0);
@@ -36,6 +58,99 @@ class Evaluator {
 		rnd.init(seed);
 	}
 
+	public function addFast(val: Value, canSkip: Bool = true) : FastRef {
+		if(canSkip) {
+			switch(val) {
+				case null | VZero: return new FastRef(-1);
+				default:
+			}
+		}
+		switch(val) {
+			case VVector(x, y, z, w):
+				var r = addFast(x, false);
+				addFast(y, false);
+				addFast(z, false);
+				addFast(w, false);
+				return r;
+			default:
+		}
+		var ret = new FastRef(pendingValues.length);
+		pendingValues.push(val);
+		return ret;
+	}
+
+	function buildFast() {
+		fastCount = pendingValues.length;
+		fastValues = hl.CArray.alloc(FastValue, fastCount);
+		for(i in 0...fastCount) {
+			fastValues.unsafeSet(i, mapFast(pendingValues[i]));
+		}
+		pendingValues = null;
+	}
+
+	public function getFast(ref: FastRef, time: Float) : Float {
+		var fv = fastValues[ref];
+		return switch(fv.type) {
+			case VConst:
+				fv.scale;
+			case VRandom:
+				random() * fv.scale + fv.offset;
+			case VCurve:
+				fv.curve1.getVal(time);
+			case VCurveScale:
+				fv.curve1.getVal(time) * fv.scale + fv.offset;
+			case VMultRandCurve:
+				(random() * fv.scale + fv.offset) * fv.curve1.getVal(time);
+			case VAddRandCurve:
+				(random() * fv.scale + fv.offset) + fv.curve1.getVal(time);
+			case VRandomBetweenCurves:
+				var a = fv.curve1.getVal(time);
+				var b = fv.curve2.getVal(time);
+				a + (b - a) * random();
+			case VSlow:
+				getFloatSlow(fv.slow, time);
+			default:
+				0.0;
+		};
+	}
+
+	public function getFastVec(ref: FastRef, time: Float, vec: h3d.Vector4) {
+		var x = getFast(ref, time);
+		ref = ref.next();
+		var y = getFast(ref, time);
+		ref = ref.next();
+		var z = getFast(ref, time);
+		ref = ref.next();
+		var w = getFast(ref, time);
+		vec.set(x, y, z, w);
+	}
+
+	static function mapFast(val: Value) : FastValue {
+		inline function make(t: FastValueType, fn: FastValue -> Void) : FastValue {
+			var f = new FastValue(t);
+			fn(f);
+			return f;
+		}
+		return switch(val) {
+			case null|VZero: null;
+			case VConst(v):
+				make(VConst, f -> f.scale = v);
+			case VCurve(c):
+				make(VCurve, f -> f.curve1 = c);
+			case VOptCurve(c, scale, offset):
+				make(VCurveScale, f -> { f.curve1 = c; f.scale = scale; f.offset = offset; });
+			case VRandom(scale, add):
+				make(VRandom, f -> { f.scale = scale; f.offset = add; });
+			case VMultRandCurve(rscale, cst, c):
+				make(VMultRandCurve, f -> { f.scale = rscale; f.offset = cst; f.curve1 = c; });
+			case VAddRandCurve(rscale, cst, c):
+				make(VAddRandCurve, f -> { f.scale = rscale; f.offset = cst; f.curve1 = c; });
+			case VRandomBetweenCurves(a, b):
+				make(VRandomBetweenCurves, f -> { f.curve1 = a; f.curve2 = b; });
+			default:
+				make(VSlow, f -> f.slow = val);
+		}
+	}
 
 	public static function optimize(val: Value) : Value {
 		function opt(v: Value) : Value {
@@ -249,7 +364,7 @@ class Evaluator {
 				case VZero: "VZero";
 				case VConst(v): "VConst";
 				case VCurve(c): "VCurve";
-				case VOptCurve(c, scale, offset): "VCurveScale";
+				case VOptCurve(c, scale, offset): "VOptCurve";
 				case VBlendCurves(_,_,_,_): 'VBlendCurves';
 				case VParamRemap(a, _): 'VParamRemap(${rec(a)})';
 				case VValueRemap(v, remap): 'VValueRemap(${rec(v)}, ${rec(remap)})';
