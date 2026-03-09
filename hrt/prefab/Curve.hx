@@ -47,14 +47,15 @@ class CurveKey {
 
 typedef CurveKeys = Array<CurveKey>;
 
+@:publicFields
 class KeyData {
-	public var time : Float = 0;
-	public var value : Float = 0;
-	public var mode : Int = 0;
-	public var nextHandleDt : Float = 0;
-	public var nextHandleDv : Float = 0;
-	public var prevHandleDt : Float = 0;
-	public var prevHandleDv : Float = 0;
+	var time : Float;
+	var value : Float;
+	var mode : CurveKeyMode;
+	var nextHandleDt : Float;
+	var nextHandleDv : Float;
+	var prevHandleDt : Float;
+	var prevHandleDv : Float;
 
 	public function new() {}
 }

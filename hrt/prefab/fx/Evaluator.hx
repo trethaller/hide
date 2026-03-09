@@ -18,8 +18,7 @@ private enum abstract FastValueType(Int) from Int to Int {
 	var type : FastValueType;
 	var scale : Float;
 	var offset : Float;
-	var curve1 : Curve;
-	var curve2 : Curve;
+	var curveIdx : Int;
 	var slow : Value;
 	public function new(t: FastValueType) {
 		this.type = t;
@@ -44,10 +43,13 @@ abstract FastRef(Int) to Int {
 
 
 class Evaluator {
+	public inline static final MAX_CURVES = 16;
+
 	@:packed public var rnd: hxd.Rand;
 	var fastValues : FastValues;
 	var fastCount : Int;
 	var pendingValues : Array<Value> = [];
+	public var curves : Array<Curve> = [];
 	public var parameters: Map<String, Float> = [];
 	
 	public function new() {
@@ -77,6 +79,7 @@ class Evaluator {
 
 	function buildFast() {
 		fastCount = pendingValues.length;
+		curves = [];
 		fastValues = hl.CArray.alloc(FastValue, fastCount);
 		for(i in 0...fastCount) {
 			fastValues.unsafeSet(i, mapFast(pendingValues[i]));
@@ -93,17 +96,17 @@ class Evaluator {
 				fv.scale;
 			case VRandom:
 				random() * fv.scale + fv.offset;
-			case VCurve:
-				fv.curve1.getVal(time);
-			case VCurveScale:
-				fv.curve1.getVal(time) * fv.scale + fv.offset;
-			case VMultRandCurve:
-				(random() * fv.scale + fv.offset) * fv.curve1.getVal(time);
-			case VAddRandCurve:
-				(random() * fv.scale + fv.offset) + fv.curve1.getVal(time);
-			case VRandomBetweenCurves:
-				var a = fv.curve1.getVal(time);
-				var b = fv.curve2.getVal(time);
+		case VCurve:
+			curves[fv.curveIdx].getVal(time);
+		case VCurveScale:
+			curves[fv.curveIdx].getVal(time) * fv.scale + fv.offset;
+		case VMultRandCurve:
+			(random() * fv.scale + fv.offset) * curves[fv.curveIdx].getVal(time);
+		case VAddRandCurve:
+			(random() * fv.scale + fv.offset) + curves[fv.curveIdx].getVal(time);
+		case VRandomBetweenCurves:
+			var a = curves[fv.curveIdx & (MAX_CURVES - 1)].getVal(time);
+			var b = curves[fv.curveIdx >> 4].getVal(time);
 				a + (b - a) * random();
 			case VSlow:
 				getFloatSlow(fv.slow, time);
@@ -123,7 +126,14 @@ class Evaluator {
 		vec.set(x, y, z, w);
 	}
 
-	static function mapFast(val: Value) : FastValue {
+	function mapFast(val: Value) : FastValue {
+		inline function addCurve(c: Curve) : Int {
+			var idx = curves.length;
+			if(idx >= MAX_CURVES)
+				throw "Too many curves";
+			curves.push(c);
+			return idx;
+		}
 		inline function make(t: FastValueType, fn: FastValue -> Void) : FastValue {
 			var f = new FastValue(t);
 			fn(f);
@@ -135,17 +145,17 @@ class Evaluator {
 			case VConst(v):
 				make(VConst, f -> f.scale = v);
 			case VCurve(c):
-				make(VCurve, f -> f.curve1 = c);
+				make(VCurve, f -> f.curveIdx = addCurve(c));
 			case VOptCurve(c, scale, offset):
-				make(VCurveScale, f -> { f.curve1 = c; f.scale = scale; f.offset = offset; });
+				make(VCurveScale, f -> { f.curveIdx = addCurve(c); f.scale = scale; f.offset = offset; });
 			case VRandom(scale, add):
 				make(VRandom, f -> { f.scale = scale; f.offset = add; });
 			case VMultRandCurve(rscale, cst, c):
-				make(VMultRandCurve, f -> { f.scale = rscale; f.offset = cst; f.curve1 = c; });
+				make(VMultRandCurve, f -> { f.scale = rscale; f.offset = cst; f.curveIdx = addCurve(c); });
 			case VAddRandCurve(rscale, cst, c):
-				make(VAddRandCurve, f -> { f.scale = rscale; f.offset = cst; f.curve1 = c; });
+				make(VAddRandCurve, f -> { f.scale = rscale; f.offset = cst; f.curveIdx = addCurve(c); });
 			case VRandomBetweenCurves(a, b):
-				make(VRandomBetweenCurves, f -> { f.curve1 = a; f.curve2 = b; });
+				make(VRandomBetweenCurves, f -> { var i1 = addCurve(a); f.curveIdx = i1 | (addCurve(b) << 4); });
 			default:
 				make(VSlow, f -> f.slow = val);
 		}
