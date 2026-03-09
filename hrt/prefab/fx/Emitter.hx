@@ -131,19 +131,19 @@ class EmitterEvaluator extends Evaluator {
 		buildFast();
 	}
 
-	public function getStartSpeed(vec: h3d.Vector4) {
+	public inline function getStartSpeed(vec: h3d.Vector4) {
 		getFastVec(startSpeed, emitter.curTime, vec);
 	}
 
-	public function getStartWorldSpeed(vec: h3d.Vector4) {
+	public inline function getStartWorldSpeed(vec: h3d.Vector4) {
 		getFastVec(startWorldSpeed, emitter.curTime, vec);
 	}
 
-	public function getAcceleration(t: Float, vec: h3d.Vector4) {
+	public inline function getAcceleration(t: Float, vec: h3d.Vector4) {
 		getFastVec(acceleration, t, vec);
 	}
 
-	public function getWorldAcceleration(t: Float, vec: h3d.Vector4) {
+	public inline function getWorldAcceleration(t: Float, vec: h3d.Vector4) {
 		getFastVec(worldAcceleration, t, vec);
 	}
 
