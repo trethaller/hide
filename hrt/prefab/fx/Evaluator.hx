@@ -42,14 +42,14 @@ abstract FastRef(Int) to Int {
 	}
 }
 
-class Evaluator {
-	public var rnd: hxd.Rand;
-	public var parameters: Map<String, Float> = [];
 
+class Evaluator {
+	@:packed public var rnd: hxd.Rand;
 	var fastValues : FastValues;
 	var fastCount : Int;
 	var pendingValues : Array<Value> = [];
-
+	public var parameters: Map<String, Float> = [];
+	
 	public function new() {
 		this.rnd = new hxd.Rand(0);
 	}
