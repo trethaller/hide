@@ -51,7 +51,7 @@ class Evaluator {
 	var pendingValues : Array<Value> = [];
 	public var curves : Array<Curve> = [];
 	public var parameters: Map<String, Float> = [];
-	
+
 	public function new() {
 		this.rnd = new hxd.Rand(0);
 	}
@@ -77,7 +77,7 @@ class Evaluator {
 		return ret;
 	}
 
-	function buildFast() {
+	function buildFast() {  // TODO: JS
 		fastCount = pendingValues.length;
 		curves = [];
 		fastValues = hl.CArray.alloc(FastValue, fastCount);
@@ -108,10 +108,10 @@ class Evaluator {
 			var a = curves[fv.curveIdx & (MAX_CURVES - 1)].getVal(time);
 			var b = curves[fv.curveIdx >> 4].getVal(time);
 				a + (b - a) * random();
-			case VSlow:
-				getFloatSlow(fv.slow, time);
-			default:
-				0.0;
+		case VSlow:
+			getFloatSlow(fv.slow, time);
+		default:
+			0.0;
 		};
 	}
 

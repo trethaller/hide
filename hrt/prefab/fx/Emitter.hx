@@ -1496,6 +1496,8 @@ class EmitterObject extends h3d.scene.Object {
 		if (scene == null)
 			return;
 
+		evaluator.prefetch();
+
 		switch(simulationSpace){
 			// Particles in Local are spawned next to emitter in the scene tree,
 			// so emitter shape can be transformed (especially scaled) without affecting children
