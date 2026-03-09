@@ -112,7 +112,7 @@ class Evaluator {
 		};
 	}
 
-	public function getFastVec(ref: FastRef, time: Float, vec: h3d.Vector4) {
+	inline public function getFastVec(ref: FastRef, time: Float, vec: h3d.Vector4) {
 		var x = getFast(ref, time);
 		ref = ref.next();
 		var y = getFast(ref, time);
