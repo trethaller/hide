@@ -119,9 +119,9 @@ class EmitterEvaluator extends Evaluator {
 		acceleration = addFast(def.acceleration);
 		worldAcceleration = addFast(def.worldAcceleration);
 		localOffset = addFast(def.localOffset);
-		scale = addFast(def.scale, false);
-		scaleOverTime = addFast(def.scaleOverTime, false);
-		stretch = addFast(def.stretch, false);
+		scale = addFast(def.scale);
+		scaleOverTime = addFast(def.scaleOverTime);
+		stretch = addFast(def.stretch);
 		stretchVelocity = addFast(def.stretchVelocity);
 		rotation = addFast(def.rotation);
 		dampen = addFast(def.dampen);

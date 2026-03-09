@@ -58,20 +58,16 @@ class Evaluator {
 		rnd.init(seed);
 	}
 
-	public function addFast(val: Value, canSkip: Bool = true) : FastRef {
-		if(canSkip) {
-			switch(val) {
-				case null | VZero: return new FastRef(-1);
-				default:
-			}
-		}
+	public function addFast(val: Value) : FastRef {
 		switch(val) {
+			case null | VZero: return new FastRef(-1);
 			case VVector(x, y, z, w):
-				var r = addFast(x, false);
-				addFast(y, false);
-				addFast(z, false);
-				addFast(w, false);
-				return r;
+				var idx = pendingValues.length;
+				pendingValues.push(x);
+				pendingValues.push(y);
+				pendingValues.push(z);
+				pendingValues.push(w);
+				return new FastRef(idx);
 			default:
 		}
 		var ret = new FastRef(pendingValues.length);
@@ -91,6 +87,8 @@ class Evaluator {
 	public function getFast(ref: FastRef, time: Float) : Float {
 		var fv = fastValues[ref];
 		return switch(fv.type) {
+			case VZero:
+				0.0;
 			case VConst:
 				fv.scale;
 			case VRandom:
@@ -132,7 +130,8 @@ class Evaluator {
 			return f;
 		}
 		return switch(val) {
-			case null|VZero: null;
+			case null|VZero:
+				make(VZero, f -> {});
 			case VConst(v):
 				make(VConst, f -> f.scale = v);
 			case VCurve(c):
