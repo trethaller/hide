@@ -112,22 +112,23 @@ class EmitterEvaluator extends Evaluator {
 	public function new(emitter: EmitterObject, def: InstanceDef) {
 		super();
 		this.emitter = emitter;
-		localSpeed = addFast(def.localSpeed);
-		worldSpeed = addFast(def.worldSpeed);
-		orbitSpeed = addFast(def.orbitSpeed);
-		orbitSpeedOverTime = addFast(def.orbitSpeedOverTime);
-		acceleration = addFast(def.acceleration);
-		worldAcceleration = addFast(def.worldAcceleration);
-		localOffset = addFast(def.localOffset);
+		// order matches access order in updateAbsPos / update
+		stretch = addFast(def.stretch);
 		scale = addFast(def.scale);
 		scaleOverTime = addFast(def.scaleOverTime);
-		stretch = addFast(def.stretch);
-		stretchVelocity = addFast(def.stretchVelocity);
 		rotation = addFast(def.rotation);
-		dampen = addFast(def.dampen);
-		maxVelocity = addFast(def.maxVelocity);
+		localOffset = addFast(def.localOffset);
 		startSpeed = addFast(emitter.startSpeed);
 		startWorldSpeed = addFast(emitter.startWorldSpeed);
+		acceleration = addFast(def.acceleration);
+		worldAcceleration = addFast(def.worldAcceleration);
+		localSpeed = addFast(def.localSpeed);
+		dampen = addFast(def.dampen);
+		worldSpeed = addFast(def.worldSpeed);
+		maxVelocity = addFast(def.maxVelocity);
+		stretchVelocity = addFast(def.stretchVelocity);
+		orbitSpeed = addFast(def.orbitSpeed);
+		orbitSpeedOverTime = addFast(def.orbitSpeedOverTime);
 		buildFast();
 	}
 
