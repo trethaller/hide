@@ -8,10 +8,9 @@ private enum abstract FastValueType(Int) from Int to Int {
 	var VRandom = 3;
 	var VCurve = 4;
 	var VMultRandCurve = 5;
-	var VBlendCurves = 6;
-	var VAddRandCurve = 7;
-	var VRandomBetweenCurves = 8;
-	var VSlow = 9;
+	var VAddRandCurve = 6;
+	var VRandomBetweenCurves = 7;
+	var VSlow = 8;
 }
 
 @:publicFields @:struct class FastValue {
@@ -45,19 +44,25 @@ abstract FastRef(Int) to Int {
 class Evaluator {
 	public inline static final MAX_CURVES = 16;
 
-	@:packed public var rnd: hxd.Rand;
+	// @:packed public var rnd: hxd.Rand;
 	var fastValues : FastValues;
 	var fastCount : Int;
 	var pendingValues : Array<Value> = [];
-	public var curves : Array<Curve> = [];
+	var curves : Array<Curve>;
+	var randomCount = 0;
+	var randoms : Array<Float>;
+	var randIdx = 0;
+	var maxInstances = 0;
 	public var parameters: Map<String, Float> = [];
 
-	public function new() {
-		this.rnd = new hxd.Rand(0);
+	public function new(count = 1){
+		maxInstances = count;
 	}
 
-	public function setSeed(seed: Int) {
-		rnd.init(seed);
+	public function setInstance(idx: Int) {
+		randIdx = idx * randomCount;
+		if(idx >= maxInstances)
+			throw "Instance index out of bounds";
 	}
 
 	public function addFast(val: Value) : FastRef {
@@ -77,14 +82,36 @@ class Evaluator {
 		return ret;
 	}
 
-	function buildFast() {  // TODO: JS
+	function buildFast() {
 		fastCount = pendingValues.length;
 		curves = [];
 		fastValues = hl.CArray.alloc(FastValue, fastCount);
 		for(i in 0...fastCount) {
 			fastValues.unsafeSet(i, mapFast(pendingValues[i]));
 		}
+		randoms = [for(i in 0...randomCount * maxInstances) hxd.Math.random()];
 		pendingValues = null;
+	}
+
+	inline function prefetchCurve(c: Curve) {
+		untyped $prefetch(c.curveData, 0);
+	}
+
+	public function prefetch() {
+		for(c in curves)
+			prefetchCurve(c);
+	}
+
+	function prefetchRef(ref: FastRef) {
+		var fv = fastValues[ref];
+		var curveIdx = fv.curveIdx;
+		if(curveIdx >= 0) {
+			var id1 = curveIdx & (MAX_CURVES - 1);
+			prefetchCurve(curves[id1]);
+			var id2 = curveIdx >> 4;
+			if(id2 >= 0)
+				prefetchCurve(curves[id2]);
+		}
 	}
 
 	public function getFast(ref: FastRef, time: Float) : Float {
@@ -96,22 +123,20 @@ class Evaluator {
 				fv.scale;
 			case VRandom:
 				random() * fv.scale + fv.offset;
-		case VCurve:
-			curves[fv.curveIdx].getVal(time);
-		case VCurveScale:
-			curves[fv.curveIdx].getVal(time) * fv.scale + fv.offset;
-		case VMultRandCurve:
-			(random() * fv.scale + fv.offset) * curves[fv.curveIdx].getVal(time);
-		case VAddRandCurve:
-			(random() * fv.scale + fv.offset) + curves[fv.curveIdx].getVal(time);
-		case VRandomBetweenCurves:
-			var a = curves[fv.curveIdx & (MAX_CURVES - 1)].getVal(time);
-			var b = curves[fv.curveIdx >> 4].getVal(time);
-				a + (b - a) * random();
-		case VSlow:
-			getFloatSlow(fv.slow, time);
-		default:
-			0.0;
+			case VCurve:
+				curves[fv.curveIdx].getVal(time);
+			case VCurveScale:
+				curves[fv.curveIdx].getVal(time) * fv.scale + fv.offset;
+			case VMultRandCurve:
+				(random() * fv.scale + fv.offset) * curves[fv.curveIdx].getVal(time);
+			case VAddRandCurve:
+				(random() * fv.scale + fv.offset) + curves[fv.curveIdx].getVal(time);
+			case VRandomBetweenCurves:
+				var a = curves[fv.curveIdx & (MAX_CURVES - 1)].getVal(time);
+				var b = curves[fv.curveIdx >> 4].getVal(time);
+					a + (b - a) * random();
+			case VSlow:
+				getFloatSlow(fv.slow, time);
 		};
 	}
 
@@ -134,6 +159,9 @@ class Evaluator {
 			curves.push(c);
 			return idx;
 		}
+		inline function addRandom() {
+			randomCount++;
+		}
 		inline function make(t: FastValueType, fn: FastValue -> Void) : FastValue {
 			var f = new FastValue(t);
 			fn(f);
@@ -147,15 +175,38 @@ class Evaluator {
 			case VCurve(c):
 				make(VCurve, f -> f.curveIdx = addCurve(c));
 			case VOptCurve(c, scale, offset):
-				make(VCurveScale, f -> { f.curveIdx = addCurve(c); f.scale = scale; f.offset = offset; });
+				make(VCurveScale, f -> {
+					f.curveIdx = addCurve(c);
+					f.scale = scale;
+					f.offset = offset;
+				});
 			case VRandom(scale, add):
-				make(VRandom, f -> { f.scale = scale; f.offset = add; });
+				make(VRandom, f -> {
+					addRandom();
+					f.scale = scale;
+					f.offset = add;
+				});
 			case VMultRandCurve(rscale, cst, c):
-				make(VMultRandCurve, f -> { f.scale = rscale; f.offset = cst; f.curveIdx = addCurve(c); });
+				make(VMultRandCurve, f -> {
+					addRandom();
+					f.scale = rscale;
+					f.offset = cst;
+					f.curveIdx = addCurve(c);
+				});
 			case VAddRandCurve(rscale, cst, c):
-				make(VAddRandCurve, f -> { f.scale = rscale; f.offset = cst; f.curveIdx = addCurve(c); });
+				make(VAddRandCurve, f -> {
+					addRandom();
+					f.scale = rscale;
+					f.offset = cst;
+					f.curveIdx = addCurve(c);
+				});
 			case VRandomBetweenCurves(a, b):
-				make(VRandomBetweenCurves, f -> { var i1 = addCurve(a); f.curveIdx = i1 | (addCurve(b) << 4); });
+				make(VRandomBetweenCurves, f -> {
+					addRandom();
+					var i1 = addCurve(a);
+					var i2 = addCurve(b);
+					f.curveIdx = i1 | (i2 << 4);
+				});
 			default:
 				make(VSlow, f -> f.slow = val);
 		}
@@ -226,7 +277,7 @@ class Evaluator {
 	}
 
 	inline function random() {
-		return rnd.rand();
+		return randoms[randIdx++];
 	}
 
 	public function setAllParameters(params: Array<hrt.prefab.fx.FX.Parameter>) {
@@ -337,12 +388,18 @@ class Evaluator {
 	static var stats : {
 		source: Map<String, Int>,
 		opt: Map<String, Int>,
+		numRands : Array<Int>,
+		numCurves : Array<Int>,
+		numKeys : Array<Int>,
 	}
 
 	public static function beginStats() {
 		stats = {
 			source: new Map(),
 			opt: new Map(),
+			numRands: [],
+			numCurves: [],
+			numKeys: [],
 		}
 	}
 
@@ -357,6 +414,18 @@ class Evaluator {
 			}
 			sb.add('\n');
 		}
+		sb.add('-- Num curves\n');
+		for(i in 0...stats.numCurves.length) {
+			sb.add('\t${i}: ${stats.numCurves[i]}\n');
+		}
+		sb.add('-- Num keys\n');
+		for(i in 0...stats.numKeys.length) {
+			sb.add('\t${i}: ${stats.numKeys[i]}\n');
+		}
+		sb.add('-- Num rands\n');
+		for(i in 0...stats.numRands.length) {
+			sb.add('\t${i}: ${stats.numRands[i]}\n');
+		}
 		sb.add('-- Source values\n');
 		printStats(stats.source);
 		sb.add('-- Optimized values:\n');
@@ -368,20 +437,51 @@ class Evaluator {
 	static function addStat(source: Value, opt: Value) {
 		if(stats == null)
 			return;
+
+		var numRands = 0;
+		var numCurves = 0;
+		var count = false;
+
+		function addCurve(c: Curve) {
+			if(!count) return;
+			numCurves++;
+			stats.numKeys[c.keys.length]++;
+		}
+
 		function rec(v: Value) {
 			return switch v {
 				case VZero: "VZero";
 				case VConst(v): "VConst";
-				case VCurve(c): "VCurve";
-				case VOptCurve(c, scale, offset): "VOptCurve";
-				case VBlendCurves(_,_,_,_): 'VBlendCurves';
-				case VParamRemap(a, _): 'VParamRemap(${rec(a)})';
-				case VValueRemap(v, remap): 'VValueRemap(${rec(v)}, ${rec(remap)})';
-			case VRandomBetweenCurves(a, b): 'VRandomBetweenCurves';
-			case VRandom(scale, add): 'VRandom';
-				//case VAddRandomScale(idx, scale, add): 'VAddRandomScale';
-				case VMultRandCurve(_): 'VMultRandCurve';
-				case VAddRandCurve(_): 'VAddRandCurve';
+				case VCurve(c):
+					addCurve(c);
+					"VCurve";
+				case VOptCurve(c, _, _):
+					addCurve(c);
+					"VOptCurve";
+				case VBlendCurves(a,b,_,_):
+					addCurve(a);
+					addCurve(b);
+					'VBlendCurves';
+				case VParamRemap(a, _):
+					'VParamRemap(${rec(a)})';
+				case VValueRemap(v, remap):
+					'VValueRemap(${rec(v)}, ${rec(remap)})';
+				case VRandomBetweenCurves(a, b):
+					addCurve(a);
+					addCurve(b);
+					if(count) numRands++;
+					'VRandomBetweenCurves';
+				case VRandom(scale, add):
+					if(count) numRands++;
+					'VRandom';
+				case VMultRandCurve(_,_,c):
+					addCurve(c);
+					if(count) numRands++;
+					'VMultRandCurve';
+				case VAddRandCurve(_,_,c):
+					addCurve(c);
+					if(count) numRands++;
+					'VAddRandCurve';
 				case VAdd(a, b): 'VAdd(${rec(a)}, ${rec(b)})';
 				case VMult(a, b): 'VMult(${rec(a)}, ${rec(b)})';
 				case VVector(x, y, z, w): 'VVector(${rec(x)}, ${rec(y)}, ${rec(z)}, ${rec(w)})';
@@ -409,7 +509,11 @@ class Evaluator {
 		// if(rec(opt) != rec(source)) {
 		// 	throw "??";
 		// }
+		count = true;
 		register(opt, stats.opt);
+		count = false;
+		stats.numCurves[numCurves]++;
+		stats.numRands[numRands]++;
 		register(source, stats.source);
 	}
 }

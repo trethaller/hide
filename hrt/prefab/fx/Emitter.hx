@@ -110,7 +110,7 @@ class EmitterEvaluator extends Evaluator {
 	public var emitter: EmitterObject;
 
 	public function new(emitter: EmitterObject, def: InstanceDef) {
-		super();
+		super(emitter.maxCount);
 		this.emitter = emitter;
 		// order matches access order in updateAbsPos / update
 		stretch = addFast(def.stretch);
@@ -1496,7 +1496,7 @@ class EmitterObject extends h3d.scene.Object {
 		if (scene == null)
 			return;
 
-		// evaluator.prefetch();
+		evaluator.prefetch();
 
 		switch(simulationSpace){
 			// Particles in Local are spawned next to emitter in the scene tree,
@@ -1518,10 +1518,12 @@ class EmitterObject extends h3d.scene.Object {
 			trails.numTrails = maxCount;
 		}
 
+		// evaluator.prefetch();
+
 		var i = 0;
 		while(i < numInstances) {
 			var p = particles[i];
-			evaluator.setSeed(randomSeed + i);
+			evaluator.setInstance(p.idx);  // TOMR: is this stable during the entire particle lifetime ?
 			if(p.life > p.lifeTime) {
 				if (p.trail == null || p.trail.generation != p.trailGeneration) {
 					// SUB EMITTER
