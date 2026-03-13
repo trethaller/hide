@@ -4,9 +4,9 @@ package hrt.prefab.fx;
 private enum abstract FastValueType(Int) from Int to Int {
 	var VZero = 0;
 	var VConst = 1;
-	var VCurveScale = 2;
-	var VRandom = 3;
-	var VCurve = 4;
+	var VRandom = 2;
+	var VCurve = 3;
+	var VCurveScale = 4;
 	var VMultRandCurve = 5;
 	var VAddRandCurve = 6;
 	var VRandomBetweenCurves = 7;
@@ -44,7 +44,7 @@ abstract FastRef(Int) to Int {
 class Evaluator {
 	public inline static final MAX_CURVES = 16;
 
-	// @:packed public var rnd: hxd.Rand;
+	@:packed public var rnd: hxd.Rand;
 	var fastValues : FastValues;
 	var fastCount : Int;
 	var pendingValues : Array<Value> = [];
@@ -60,9 +60,14 @@ class Evaluator {
 	}
 
 	public function setInstance(idx: Int) {
+		setSeed(idx); // TODO use emitter seed
 		randIdx = idx * randomCount;
 		if(idx >= maxInstances)
 			throw "Instance index out of bounds";
+	}
+
+	public function setSeed(seed: Int) {
+		rnd.init(seed);
 	}
 
 	public function addFast(val: Value) : FastRef {
@@ -114,6 +119,12 @@ class Evaluator {
 		}
 	}
 
+	inline function getCurve(idx: Int, val: Float) {
+		// TODO TOMR: RESTORE
+		return val;
+		// return curves[idx].getVal(val);
+	}
+
 	public function getFast(ref: FastRef, time: Float) : Float {
 		var fv = fastValues[ref];
 		return switch(fv.type) {
@@ -124,16 +135,16 @@ class Evaluator {
 			case VRandom:
 				random() * fv.scale + fv.offset;
 			case VCurve:
-				curves[fv.curveIdx].getVal(time);
+				getCurve(fv.curveIdx, time);
 			case VCurveScale:
-				curves[fv.curveIdx].getVal(time) * fv.scale + fv.offset;
+				getCurve(fv.curveIdx, time) * fv.scale + fv.offset;
 			case VMultRandCurve:
-				(random() * fv.scale + fv.offset) * curves[fv.curveIdx].getVal(time);
+				(random() * fv.scale + fv.offset) * getCurve(fv.curveIdx, time);
 			case VAddRandCurve:
-				(random() * fv.scale + fv.offset) + curves[fv.curveIdx].getVal(time);
+				(random() * fv.scale + fv.offset) + getCurve(fv.curveIdx, time);
 			case VRandomBetweenCurves:
-				var a = curves[fv.curveIdx & (MAX_CURVES - 1)].getVal(time);
-				var b = curves[fv.curveIdx >> 4].getVal(time);
+				var a = getCurve(fv.curveIdx & (MAX_CURVES - 1), time);
+				var b = getCurve(fv.curveIdx >> 4, time);
 					a + (b - a) * random();
 			case VSlow:
 				getFloatSlow(fv.slow, time);
@@ -277,7 +288,9 @@ class Evaluator {
 	}
 
 	inline function random() {
-		return randoms[randIdx++];
+		// return 0.5;
+		return rnd.rand();
+		//return randoms[randIdx++];
 	}
 
 	public function setAllParameters(params: Array<hrt.prefab.fx.FX.Parameter>) {
