@@ -8,6 +8,8 @@ class VolumetricLightingShader extends h3d.shader.pbr.DefaultForward {
 			var time : Float;
 		}
 
+		@const var MODE : Int;
+
 		@param var invViewProj : Mat4;
 
 		@param var intensity : Float;
@@ -134,12 +136,12 @@ class VolumetricLightingShader extends h3d.shader.pbr.DefaultForward {
 		function evaluateCascadeShadow() : Float {
 			var i = cascadeLightStride;
 			var shadow = 1.0;
-			var shadowProj = mat3x4(lightInfos[i + 2], lightInfos[i + 3], lightInfos[i + 4]);
+			var shadowViewProj = mat3x4(lightInfos[i + 2], lightInfos[i + 3], lightInfos[i + 4]);
 
 			@unroll for ( c in 0...CASCADE_COUNT ) {
 				var cascadeScale = lightInfos[i + 5 + 2 * c];
-				var shadowPos0 = transformedPosition * shadowProj;
-				var shadowPos = i == 0 ? shadowPos0 : shadowPos0 * cascadeScale.xyz + lightInfos[i + 6 + 2 * c].xyz;
+				var shadowPos0 = transformedPosition * shadowViewProj;
+				var shadowPos = c == 0 ? shadowPos0 : shadowPos0 * cascadeScale.xyz + lightInfos[i + 6 + 2 * c].xyz;
 				if ( inside(shadowPos) ) {
 					var zMax = saturate(shadowPos.z);
 					var shadowUv = shadowPos.xy;
@@ -182,13 +184,101 @@ class VolumetricLightingShader extends h3d.shader.pbr.DefaultForward {
 			return dfactor * dfactor;
 		}
 
+		function evaluateDirectionalLighting() : Vec3 {
+
+			var lightAccumulation = vec3(0);
+
+			F0 = mix(pbrSpecularColor, albedoGamma, metalness);
+
+			// Dir Light With Shadow
+			@unroll for( l in 0 ... MAX_DIR_SHADOW_COUNT ) {
+				if ( l < dirShadowCount ) {
+					var c = evaluateDirLight(l);
+					if ( dot(c, c) > 1e-6 )
+						c *= evaluateDirShadow(l);
+					lightAccumulation += c;
+				}
+			}
+			// Dir Light
+			for( l in dirShadowCount ... dirLightCount )
+				lightAccumulation += evaluateDirLight(l);
+
+			// Cascade shadows
+			if ( CASCADE_COUNT > 0 ) {
+				var c = evaluateCascadeLight();
+				if ( dot(c, c) > 1e-6 )
+					c *= evaluateCascadeShadow();
+				lightAccumulation += c;
+			}
+
+			// Indirect only support the main env from the scene at the moment
+			if( USE_INDIRECT )
+				lightAccumulation += indirectLighting();
+
+			lightAccumulation += emissive * emissivePower * pixelColor.rgb;
+			return lightAccumulation;
+		}
+
+		function evaluateDirectionalAndSpotLighting() : Vec3 {
+			var lightAccumulation = vec3(0);
+
+			F0 = mix(pbrSpecularColor, albedoGamma, metalness);
+
+			// Dir Light With Shadow
+			@unroll for( l in 0 ... MAX_DIR_SHADOW_COUNT ) {
+				if ( l < dirShadowCount ) {
+					var c = evaluateDirLight(l);
+					if ( dot(c, c) > 1e-6 )
+						c *= evaluateDirShadow(l);
+					lightAccumulation += c;
+				}
+			}
+			// Dir Light
+			for( l in dirShadowCount ... dirLightCount )
+				lightAccumulation += evaluateDirLight(l);
+
+			// Spot Light With Shadow
+			@unroll for( l in 0 ... MAX_SPOT_SHADOW_COUNT ) {
+				var c = evaluateSpotLight(l);
+				if ( dot(c, c) > 1e-6 )
+					c *= evaluateSpotShadow(l);
+				lightAccumulation += c;
+			}
+			// Spot Light
+			for( l in spotShadowCount ... spotLightCount + spotShadowCount )
+				lightAccumulation += evaluateSpotLight(l);
+
+			// Cascade shadows
+			if ( CASCADE_COUNT > 0 ) {
+				var c = evaluateCascadeLight();
+				if ( dot(c, c) > 1e-6 )
+					c *= evaluateCascadeShadow();
+				lightAccumulation += c;
+			}
+
+			// Indirect only support the main env from the scene at the moment
+			if( USE_INDIRECT )
+				lightAccumulation += indirectLighting();
+
+			lightAccumulation += emissive * emissivePower * pixelColor.rgb;
+			return lightAccumulation;
+		}
+
 		function integrateStep(stepSize : Float, integrationValues : Vec4) : Vec4 {
 			extinction = fogAt(transformedPosition);
 			var clampedExtinction = max(extinction, 1e-5);
 			var transmittance = exp(-extinction*stepSize);
 
 			var emissiveLum = emissiveIntensity * emissiveColor;
-			var luminance = (evaluateLighting() * getFogColor() * mix(vec3(1.0), saturate(envColor), fogEnvColorMult) + emissiveLum) * extinction;
+
+			var lighting = vec3(0);
+			switch ( MODE ) {
+				case 0: lighting = evaluateLighting();
+				case 1: lighting = evaluateDirectionalLighting();
+				case 2: lighting = evaluateDirectionalAndSpotLighting();
+			}
+
+			var luminance = (lighting * getFogColor() * mix(vec3(1.0), saturate(envColor), fogEnvColorMult) + emissiveLum) * extinction;
 			var integScatt = (luminance - luminance*transmittance) / clampedExtinction;
 
 			integrationValues.rgb += integrationValues.a * integScatt;
@@ -254,6 +344,12 @@ class VolumetricLightingShader extends h3d.shader.pbr.DefaultForward {
 	}
 }
 
+enum VolumetricLightingMode {
+	All;
+	DirectionalOnly;
+	DirectionalAndSpot;
+}
+
 @:access(h3d.scene.Renderer)
 class VolumetricLighting extends RendererFX {
 
@@ -270,6 +366,7 @@ class VolumetricLighting extends RendererFX {
 	@:s public var blend : h3d.mat.PbrMaterial.PbrBlend = Alpha;
 	@:s public var color : Int = 0xFFFFFF;
 	@:s public var steps : Int = 10;
+	@:s public var mode : VolumetricLightingMode = All;
 	@:s public var blur : Float = 0.0;
 	@:s public var blurDepthThreshold : Float = 10.0;
 	@:s public var startDistance : Float = 0.0;
@@ -425,6 +522,8 @@ class VolumetricLighting extends RendererFX {
 	}
 
 	function fillShaderParams(s : VolumetricLightingShader) {
+		vshader.MODE = mode.getIndex();
+
 		vshader.startDistance = startDistance;
 		vshader.endDistance = endDistance;
 		vshader.maxCamDist = maxCamDist;
@@ -477,6 +576,7 @@ class VolumetricLighting extends RendererFX {
 
 		v.intensity = v1.intensity;
 		v.steps = v1.steps;
+		v.mode = v1.mode;
 		v.blur = v1.blur;
 		v.blurDepthThreshold = v1.blurDepthThreshold;
 		v.startDistance = v1.startDistance;
@@ -514,6 +614,7 @@ class VolumetricLighting extends RendererFX {
 		return { effect : cast v, setFactor : (f : Float) -> {
 			v.intensity = hxd.Math.lerp(v1.intensity, v2.intensity, f);
 			v.steps = Std.int(hxd.Math.lerp(v1.steps, v2.steps, f));
+			v.mode = f < 0.5 ? v1.mode : v2.mode;
 			v.blur = hxd.Math.lerp(v1.blur, v2.blur, f);
 			v.blurDepthThreshold = hxd.Math.lerp(v1.blurDepthThreshold, v2.blurDepthThreshold, f);
 			v.startDistance = hxd.Math.lerp(v1.startDistance, v2.startDistance, f);
@@ -687,6 +788,7 @@ class VolumetricLighting extends RendererFX {
 					<slider field={blurDepthThreshold} />
 					<range(0,1) field={ditheringIntensity} />
 					<range(0,200) label="Fog Quality Distance" field={maxCamDist} />
+					<select label="Lighting Mode" field={mode} label-color={Red} tooltip="Impact performances"/>
 				</category>
 			</root>
 			);

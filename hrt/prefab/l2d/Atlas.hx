@@ -1,5 +1,6 @@
 package hrt.prefab.l2d;
 
+@:prefabIcon(HuiRes.ui.icons.prefab.atlas)
 class Atlas extends Object2D {
 
 	// parameters
@@ -64,8 +65,6 @@ class Atlas extends Object2D {
 		);
 	}
 
-	#if editor
-
 	override function makeInteractive():h2d.Interactive {
 		if(local2d == null)
 			return null;
@@ -78,6 +77,8 @@ class Atlas extends Object2D {
 		int.propagateEvents = true;
 		return int;
 	}
+
+	#if editor
 
 	override function edit( ctx : hide.prefab.EditContext ) {
 		super.edit(ctx);

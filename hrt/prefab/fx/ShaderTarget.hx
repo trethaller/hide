@@ -4,6 +4,7 @@ class ShaderTargetObj extends h3d.scene.Object {
 	public var tag : String;
 	public var priority : Int = 1;
 	public var shadersRoot : ShaderTarget;
+	var guard = 0;
 
 	public function apply(fx : hrt.prefab.fx.FX) {
 		function reparentChildren(obj : hrt.prefab.Object3D) {
@@ -29,7 +30,6 @@ class ShaderTargetObj extends h3d.scene.Object {
 
 		var fxAnim : hrt.prefab.fx.FX.FXAnimation = cast fx.local3d;
 		shadersRoot.local3d = parent;
-		applyShaders();
 
 		if (fxAnim == null)
 			return;
@@ -54,22 +54,28 @@ class ShaderTargetObj extends h3d.scene.Object {
 	public function removeShaders() {
 		for (s in shadersRoot.findAll(Shader))
 			s.dispose();
+		guard = Std.int(hxd.Math.max(0, guard - 1));
+	}
+
+	public function isApplied() {
+		return guard > 0;
 	}
 
 	function applyShader(s: Shader) {
 		s.apply3d((o) -> return !Std.isOfType(o, hrt.prefab.fx.FX.FXAnimation) );
+		guard++;
 	}
 
 	override function onRemove() {
 		super.onRemove();
 		removeShaders();
-
-		var activeShaderTarget = ShaderTarget.updateShaderTargets(shadersRoot.target);
-		if (activeShaderTarget != null)
-			activeShaderTarget.applyShaders();
+		if (parent?.allocated)
+			ShaderTarget.updateShaderTargets(shadersRoot.target);
 	}
 }
 
+@:prefabIcon(HuiRes.ui.icons.prefab.shader_target)
+@:prefabName("Shader Target")
 class ShaderTarget extends Object3D {
 	@:s public var tag : String;
 	@:s public var priority : Int = 1;
@@ -80,26 +86,51 @@ class ShaderTarget extends Object3D {
 		super(parent, contextShared);
 	}
 
-	public static function updateShaderTargets(o : h3d.scene.Object) : ShaderTargetObj {
-		var sts = o.findAll(obj -> Std.downcast(obj, ShaderTargetObj));
-		for (st in sts) {
-			if (st.tag == null) continue;
-
-			for (st2 in sts) {
-				if (st2 == st) continue;
-				if (st2.tag != st.tag) continue;
-
-				var toRemove = st.priority > st2.priority ? st2 : st;
-				toRemove.visible = false;
-				toRemove.removeShaders();
-				sts.remove(toRemove);
-				break;
-			}
+	public static function updateShaderTargets(o : h3d.scene.Object) {
+		var sts : Array<ShaderTargetObj> = [];
+		for (idx in 0...o.numChildren) {
+			if (!Std.isOfType(o.getChildAt(idx), ShaderTargetObj))
+				continue;
+			sts.push(cast o.getChildAt(idx));
 		}
 
-		if (sts.length > 0)
-			return sts[0];
-		return null;
+		var actives = new Map<String, Array<ShaderTargetObj>>();
+		for (st in sts) {
+			if (st.tag == null) {
+				if (!st.isApplied())
+					st.applyShaders();
+				continue;
+			}
+
+			var arr = actives.get(st.tag);
+			if (arr == null) {
+				arr = [];
+				actives.set(st.tag, arr);
+			}
+
+			var idx = 0;
+			while (idx < arr.length) {
+				if (arr[idx].priority <= st.priority)
+					break;
+				idx++;
+			}
+
+			arr.insert(idx, st);
+		}
+
+		for (k in actives.keys()) {
+			var arr = actives.get(k);
+			for (idx in 0...arr.length) {
+				if (idx == 0) {
+					if (!arr[idx].isApplied())
+						arr[idx].applyShaders();
+					continue;
+				}
+
+				if (arr[idx].isApplied())
+					arr[idx].removeShaders();
+			}
+		}
 	}
 
 	function makeShaderTargetObj(target : h3d.scene.Object) {
@@ -113,10 +144,8 @@ class ShaderTarget extends Object3D {
 		o.priority = this.priority;
 		o.tag = this.tag;
 		o.shadersRoot = this;
-
-		var activeShaderTarget = updateShaderTargets(target);
-		if (activeShaderTarget == o)
-			o.apply(fx);
+		o.apply(fx);
+		updateShaderTargets(target);
 	}
 
 	override function edit2(ctx:EditContext2) {

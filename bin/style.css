@@ -3867,6 +3867,7 @@ div.gradient-box:hover {
 }
 .lods .lods-line .line div {
   overflow-x: hidden;
+  overflow-y: hidden;
   height: 100%;
 }
 .lods .lods-line .line div:nth-child(1n) {
@@ -3904,6 +3905,9 @@ div.gradient-box:hover {
 .lods .lods-line .cursor p {
   text-align: center;
   margin-top: 2px;
+}
+.lods .lods-line .precent {
+  font-variant-numeric: tabular-nums;
 }
 .lods #buttons {
   width: 100%;
@@ -4090,6 +4094,7 @@ hide-popover hide-content {
 .context-menu2 menu {
   max-height: min(500px, 90vh);
   overflow-y: auto;
+  overflow-x: auto;
   margin: 0px;
   padding: 0px;
 }
@@ -5536,6 +5541,52 @@ fancy-tooltip {
 .ref-viewer .reference .content .result .entry a em {
   font-style: normal;
   background-color: #FFFFFF20;
+}
+.cdb-favorites {
+  overflow-x: hidden;
+}
+.cdb-favorites > .header {
+  text-wrap: nowrap;
+  overflow: hidden;
+  border-left: 5px solid;
+  display: flex;
+  flex-direction: column;
+  margin: 10px 10px 10px 20px;
+  padding-left: 5px;
+  font-size: 1.1em;
+}
+.cdb-favorites > .header .title {
+  font-weight: 600;
+}
+.cdb-favorites .content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  margin-left: 26px;
+}
+.cdb-favorites .content .result {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  text-wrap: nowrap;
+  padding: 3px 0 3px 0;
+}
+.cdb-favorites .content .result .entry {
+  overflow: hidden;
+  cursor: pointer;
+}
+.cdb-favorites .content .result .entry a {
+  width: 100%;
+  padding: 3px;
+  font-weight: 400;
+  font-style: normal;
+  background-color: #404248;
+  border-radius: 10px;
+  padding: 2px 8px 2px 8px;
+  cursor: pointer;
+}
+.cdb-favorites .content .result .entry a:hover {
+  color: #c8c8ff;
 }
 fancy-drag-drop-overlay {
   pointer-events: none;

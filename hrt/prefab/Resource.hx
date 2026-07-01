@@ -31,7 +31,7 @@ class Resource extends hxd.res.Resource {
 	}
 
 	function loadData() {
-		#if editor
+		#if (editor || editor_hl)
 		// Force loading the original prefab data from disc to avoid sync errors between
 		// original data and bson
 		var localEntry = Std.downcast(entry, hxd.fs.LocalFileSystem.LocalEntry);
@@ -53,19 +53,6 @@ class Resource extends hxd.res.Resource {
 		if(prefab != null && cacheVersion == CACHE_VERSION )
 			return prefab;
 		prefab = loadBypassCache();
-		cacheVersion = CACHE_VERSION;
-		onPrefabLoaded(prefab);
-		if( !isWatched ) watch(function() {}); // auto lib reload
-		return cast prefab;
-	}
-
-	public function load2d(?shared: ContextShared) : Object2D {
-		if( Std.downcast(prefab, Object2D) != null && cacheVersion == CACHE_VERSION )
-			return cast prefab;
-		var data = loadData();
-		prefab = Std.downcast(Prefab.createFromDynamic(data), Object2D);
-		prefab.shared.prefabSource = entry.path;
-		prefab.shared.currentPath = entry.path;
 		cacheVersion = CACHE_VERSION;
 		onPrefabLoaded(prefab);
 		if( !isWatched ) watch(function() {}); // auto lib reload

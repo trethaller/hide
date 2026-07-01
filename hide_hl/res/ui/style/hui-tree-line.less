@@ -2,6 +2,40 @@ hui-tree-line {
 	padding-top: 1;
 	padding-bottom: 1;
 
+	depth-padding: 12;
+	padding-left: 8;
+
+	cursor: button;
+
+	spacing: 2;
+
+	#spacing {
+		height: 1px;
+	}
+
+	> #title {
+		visible: true;
+	}
+
+	> #title-edit {
+		visible: false;
+
+		padding-left: 4;
+		padding-right: 4;
+
+		fill-width: 1;
+	}
+
+	&.edit {
+		> #title {
+			visible: false;
+		}
+
+		> #title-edit {
+			visible: true;
+		}
+	}
+
 	> #caret {
 		background-type: hui;
 
@@ -28,9 +62,18 @@ hui-tree-line {
 
 	> #icon {
 		background-type: hui;
+		>hui-background {
+			image-color: @color-foreground;
+		}
 
 		width: 16;
 		height: 16;
+	}
+
+	> #tag-color {
+		fill-height: true;
+		width: 10;
+		halign: right;
 	}
 
 	#title {
@@ -56,14 +99,93 @@ hui-tree-line {
 	}
 
 	&.children {
-		> #caret > hui-background {
-			image: "ui/icons/chevronRight.png" fit;
+		> #caret {
+			> hui-background {
+				image: "ui/icons/chevronRight.png" fit;
+			}
 		}
 	}
 
 	&.keyboard-selected {
 		> hui-background {
-			background: #FF00FF;
+			outline: 1 @color-gray-6;
 		}
+	}
+
+	> #drop-indicator {
+		position: absolute;
+
+		> hui-background {
+			outline: 0 #5e98f5;
+		}
+	}
+
+	&.drop-inside > #drop-indicator > hui-background {
+		outline-thickness: 1;
+	}
+
+	&.drop-before > #drop-indicator > hui-background {
+		outline-thickness: 1 0 0 0;
+	}
+
+	&.drop-after > #drop-indicator > hui-background {
+		outline-thickness: 0 0 1 0;
+	}
+
+	&.disable {
+		> #caret {
+			>hui-background {
+				image-color :@color-red;
+			}
+		}
+		>#icon {
+			>hui-background {
+				image-color :@color-red;
+			}
+		}
+		>#title {
+			color: @color-red;
+		}
+	}
+
+	&.editor-only {
+		> #caret {
+			>hui-background {
+				image-color :@color-blue;
+			}
+		}
+		>#icon {
+			>hui-background {
+				image-color :@color-blue;
+			}
+		}
+		>#title {
+			color: @color-blue;
+		}
+	}
+
+	&.ingame-only {
+		> #caret {
+			>hui-background {
+				image-color : @color-yellow;
+			}
+		}
+		>#icon {
+			>hui-background {
+				image-color : @color-yellow;
+			}
+		}
+		>#title {
+			color: @color-yellow;
+		}
+	}
+
+	&.hidden {
+		alpha: 0.5;
+	}
+
+	&.locked {
+		// TODO: replace that style by italic text
+		alpha: 0.5;
 	}
 }

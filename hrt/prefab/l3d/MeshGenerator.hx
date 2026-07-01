@@ -109,6 +109,7 @@ class MeshGeneratorRoot extends h3d.scene.Object {
 	}
 }
 
+@:prefabIcon(HuiRes.ui.icons.prefab.mesh_generator)
 class MeshGenerator extends Object3D {
 
 	@:c public var root : MeshPart;
@@ -138,7 +139,8 @@ class MeshGenerator extends Object3D {
 	override function copy( obj : Dynamic ) {
 		super.copy(obj);
 		root = new MeshPart();
-		root.load(obj.root);
+		if (obj.root)
+			root.load(obj.root);
 	}
 
 	override function makeInstance() : Void {

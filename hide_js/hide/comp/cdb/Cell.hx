@@ -57,7 +57,21 @@ class Cell {
 		refresh();
 
 		switch( column.type ) {
-		case TList, TProperties, TPolymorph:
+		case TPolymorph:
+			inline function canExpand() return editColumn.type.match(TList | TProperties | TPolymorph);
+			elementHtml.addEventListener("click", function(e) {
+				if( e.shiftKey ) return;
+				var isOpen = line.subTable != null && line.subTable.cell == this;
+				if( !canExpand() && !isOpen ) return;
+				e.stopPropagation();
+				line.table.toggleList(this);
+			});
+			if( canEdit() )
+				elementHtml.addEventListener("dblclick", function(_) {
+					var isOpen = line.subTable != null && line.subTable.cell == this;
+					if( !canExpand() && !isOpen ) edit();
+				});
+		case TList, TProperties:
 			elementHtml.addEventListener("click", function(e) {
 				if( e.shiftKey ) return;
 				e.stopPropagation();
@@ -82,9 +96,10 @@ class Cell {
 		});
 
 		root.oncontextmenu = function(e) {
-			showMenu();
 			e.stopPropagation();
-			e.preventDefault();
+			if(showMenu()) {
+				e.preventDefault();
+			}
 		};
 	}
 
@@ -119,7 +134,7 @@ class Cell {
 
 	function showMenu() {
 		var menu : Array<hide.comp.ContextMenu.MenuItem> = null;
-		switch( column.type ) {
+		switch( editColumn.type ) {
 		case TId:
 			if( value != null && value != "" )
 				menu = [
@@ -130,9 +145,13 @@ class Cell {
 					},
 					{
 						label : "Show unreferenced IDs",
-						click : () -> editor.findUnreferenced(this.column, this.table),
+						click : () -> editor.findUnreferenced(this.editColumn, this.table),
 						keys : this.editor.config.get("key.cdb.showUnreferenced"),
-					}
+					},
+					{
+						label : "Add to favorites",
+						click : () -> editor.addToFavorites(this.value),
+					},
 				];
 				var remoteMenu = hide.view.RemoteConsoleView.getCdbMenuActions(this.table.sheet.name, this.value);
 				if (!remoteMenu.isEmpty()) {
@@ -173,18 +192,55 @@ class Cell {
 		case TFile:
 			menu = [
 				{ label : "Open in Explorer", enabled : value != null && value != "", click : function(){
-					Ide.showFileInExplorer(value);
+					hide.tools.IdeData.showFileInExplorer(value);
 				} },
 				{ label : "Open in Resources", enabled : value != null && value != "", click : function() {
 					ide.showFileInResources(value);
 				}},
 			];
-
+		case TString if( column.type != TPolymorph ):
+			if (!inEdit)
+				return true;
+			return false;
 		default:
+		}
+		if( column.type == TPolymorph ) {
+			var ps = table.getRealSheet().getSub(column);
+			var pe = getPolyEdit();
+			function setVariant( pc : cdb.Data.Column ) {
+				var obj = {};
+				if( pc != null ) {
+					var newVal = editor.base.getDefault(pc, true, ps);
+					var oldPe = getPolyEdit();
+					if( oldPe != null ) {
+						var conv = editor.base.getConvFunction(oldPe.col.type, pc.type);
+						if( conv != null ) {
+							var oldVal = Reflect.field(oldPe.obj, oldPe.col.name);
+							newVal = conv.f != null ? conv.f(oldVal) : oldVal;
+						}
+					}
+					Reflect.setField(obj, pc.name, newVal);
+				}
+				editor.beginChanges();
+				editor.changeObject(line, column, column.opt && pc == null ? null : obj);
+				editor.endChanges();
+				refresh();
+			}
+			var variants : Array<hide.comp.ContextMenu.MenuItem> = [for( pc in ps.columns ) {
+				label : pc.name,
+				checked : pe != null && pe.col == pc,
+				click : () -> setVariant(pc),
+			}];
+			if( menu == null ) menu = [];
+			if( menu.length > 0 ) menu.push({ label : "", isSeparator : true });
+			menu.push({ label : "Type", menu : variants });
 		}
 		if( menu != null ) {
 			focus();
 			ContextMenu.createFromPoint(ide.mouseX, ide.mouseY, menu);
+			return true;
+		} else {
+			return true;
 		}
 	}
 
@@ -195,6 +251,23 @@ class Cell {
 	function get_table() return line.table;
 	function get_columnIndex() return table.columns.indexOf(column);
 	inline function get_value() return currentValue;
+
+	public function getPolyEdit() : { col : cdb.Data.Column, obj : Dynamic } {
+		if( column.type != TPolymorph )
+			return null;
+		var v = Reflect.field(line.obj, column.name);
+		if( v == null )
+			return null;
+		for( pc in table.getRealSheet().getSub(column).columns )
+			if( Reflect.field(v, pc.name) != null )
+				return { col : pc, obj : v };
+		return null;
+	}
+
+	public var editColumn(get,never) : cdb.Data.Column;
+	function get_editColumn() { var pe = getPolyEdit(); return pe == null ? column : pe.col; }
+	var editObject(get,never) : Dynamic;
+	function get_editObject() { var pe = getPolyEdit(); return pe == null ? line.obj : pe.obj; }
 
 	function getCellConfigValue<T>( name : String, ?def : T ) : T
 	{
@@ -220,10 +293,10 @@ class Cell {
 			dropdown = null;
 		}
 		#end
-		currentValue = Reflect.field(line.obj, column.name);
+		currentValue = Reflect.field(editObject, editColumn.name);
 
 		blurOff = true;
-		var html = valueHtml(column, value, line.table.getRealSheet(), line.obj, []);
+		var html = valueHtml(column, Reflect.field(line.obj, column.name), line.table.getRealSheet(), line.obj, []);
 		if( !html.containsHtml )
 			elementHtml.textContent = html.str;
 		else
@@ -261,7 +334,7 @@ class Cell {
 	function updateClasses() {
 		elementHtml.classList.remove("edit");
 		elementHtml.classList.remove("edit_long");
-		switch( column.type ) {
+		switch( editColumn.type ) {
 		case TBool:
 			elementHtml.classList.toggle("true", value == true);
 			elementHtml.classList.toggle("false", value == false);
@@ -476,7 +549,20 @@ class Cell {
 			if( out.length == 0 )
 				return val("");
 			return {str: out.join(", "), containsHtml: true};
-		case TProperties | TPolymorph:
+		case TPolymorph:
+			var ps = sheet.getSub(c);
+			scope.push({ s : sheet, obj : obj });
+			for( pc in ps.columns ) {
+				var pval = Reflect.field(v, pc.name);
+				if( pval == null ) continue;
+				if( !canViewSubColumn(ps, pc) ) continue;
+				var r = valueHtml(pc, pval, ps, v, scope);
+				scope.pop();
+				return r;
+			}
+			scope.pop();
+			return val("");
+		case TProperties:
 			var ps = sheet.getSub(c);
 			var out = [];
 			scope.push({ s : sheet, obj : obj });
@@ -484,12 +570,7 @@ class Cell {
 				var pval = Reflect.field(v, pc.name);
 				if( pval == null && pc.opt ) continue;
 				if( !canViewSubColumn(ps, pc) ) continue;
-				if(c.type == TPolymorph) {
-					out.push('<div class="content">${valueHtml(pc, pval, ps, v, scope).str}</div>');
-					break;
-				}
-				else
-					out.push('<div class="label">${pc.name} : <div class="content">${valueHtml(pc, pval, ps, v, scope).str}</div></div>');
+				out.push('<div class="label">${pc.name} : <div class="content">${valueHtml(pc, pval, ps, v, scope).str}</div></div>');
 			}
 			scope.pop();
 			html(out.join(""));
@@ -813,6 +894,7 @@ class Cell {
 	#end
 
 	public function isTextInput() {
+		var column = editColumn;
 		return switch( column.type ) {
 		case TString if( column.kind == Script ):
 			return false;
@@ -872,14 +954,12 @@ class Cell {
 			return;
 		inEdit = true;
 
+		var column = editColumn;
 		switch( column.type ) {
 		case TString if( column.kind == Script ):
 			open();
 		case TInt, TFloat, TString, TId, TDynamic, TGuid:
 			var val = value;
-			if (column.display == Percent)
-				val *= 100;
-
 			var str = value == null ? "" : Std.isOfType(value, String) ? value : editor.base.valToString(column.type, val, false);
 
 			elementHtml.innerHTML = null;
@@ -1429,6 +1509,7 @@ class Cell {
 	}
 
 	function parseEditorValue(str : String) : Dynamic {
+		var column = editColumn;
 		var newValue : Dynamic;
 		if ( !column.type.match(TFloat) && !column.type.match(TDynamic) && Std.isOfType(str,String) ) {
 			if ((str == "" || isWhiteSpace.match(str)) && column.type.match(TId) && column.opt) {
@@ -1443,23 +1524,20 @@ class Cell {
 		if (column.display == Percent)
 			newValue *= 0.01;
 
-		switch( column.type ) {
-		case TString:
-			var v = trimNonBreakableSpaces(newValue);
-			if (v == "")
-				v = editor.base.getDefault(column, false, table.sheet);
-			return v;
-		case TFloat:
+		function interpValue(input : Dynamic) : Dynamic {
+			// Check if the input can be interpreted as a calculation
+			var r = new EReg('^([-+/*]\\d+(\\.\\d+)?)*', "");
+			if (!r.match(input.toString())) return input;
+
 			var interp = new hscript.Interp();
 			@:privateAccess interp.initOps();
 			interp.variables.set("Math", Math);
 
 			// Remove leading + if the user miss typed the expression
-			var str : String = str;
-			if(str.charAt(0) == "+") {
+			var str : String = input.toString();
+			if (str.charAt(0) == "+") {
 				str = str.substr(1);
 			}
-
 			try {
 				var parser = new hscript.Parser();
 				var expr = parser.parseString(str);
@@ -1468,21 +1546,32 @@ class Cell {
 			} catch (e : Dynamic) {
 				throw '$str is not a float';
 			}
+		}
 
-		case TDynamic:
-			newValue = try editor.base.parseValue(column.type, str, false) catch( e : Dynamic ) null;
-			if (newValue == null) {
-				newValue = Std.parseFloat(str);
-				if (hxd.Math.isNaN(newValue))
-					newValue = str;
-			}
-			return newValue;
-		default:
-			return newValue;
+		switch( column.type ) {
+			case TString:
+				var v = trimNonBreakableSpaces(newValue);
+				if (v == "")
+					v = editor.base.getDefault(column, false, table.sheet);
+				return v;
+			case TFloat:
+				return interpValue(str);
+
+			case TDynamic:
+				newValue = try editor.base.parseValue(column.type, str, false) catch( e : Dynamic ) null;
+				if (newValue == null) {
+					newValue = interpValue(str);
+					if (hxd.Math.isNaN(newValue))
+						newValue = str;
+				}
+				return newValue;
+			default:
+				return newValue;
 		}
 	}
 
 	function setRawValue( str : Dynamic ) {
+		var column = editColumn;
 		var newValue : Dynamic = try parseEditorValue(str) catch (e : Dynamic) return;
 		if (column.opt && newValue == null) {
 
@@ -1534,6 +1623,13 @@ class Cell {
 	}
 
 	public function setValue( value : Dynamic ) {
+		var pe = getPolyEdit();
+		if( pe != null ) {
+			Reflect.setField(pe.obj, pe.col.name, value);
+			currentValue = value;
+			editor.changeObject(line, column, pe.obj);
+			return;
+		}
 		currentValue = value;
 		editor.changeObject(line,column,value);
 	}
@@ -1638,19 +1734,30 @@ class Cell {
 							text : "None",
 						});
 
-						function makeIcon(c: hide.comp.Dropdown.Choice) {
-							if (sdat.props.displayIcon == null)
-								return null;
-							if (c.ico == null)
-								return new Element("<div style='display:inline-block;width:16px'/>");
-							return new Element(tileHtml(c.ico, true).str);
+						var valueIdx = 0;
+						for (idx => el in elts) {
+							if (el.id == value)
+								valueIdx = idx;
 						}
 
-						var html = new Element('
-						<select name="ref">
-							${ [for(idx in 0...elts.length) '<option value="${idx}" ${elts[idx].text == value ? "selected":""}>${elts[idx].text}</option>'].join('') }
-						</select>');
-						return html;
+						var e = new Element('<input type="text" class="select-root" readonly ${'value="${elts[valueIdx].text}"'}></input>');
+						e.on('click', function(_) {
+							var d = new Dropdown(e, elts, elts[valueIdx].id, null, true);
+							dropdown = d.element[0];
+							d.onSelect = function(v) {
+								for (option in elts) {
+									if (v == option.id) {
+										e.val(option.text);
+										e.text(option.text);
+										break;
+									}
+								}
+							}
+							d.onClose = function() {
+								dropdown = null;
+							}
+						});
+						return e;
 					}
 				case TCustom(name):
 					{
@@ -1700,14 +1807,6 @@ class Cell {
 						new Element('<p>,&nbsp</p>').appendTo(paramsContent);
 				}
 			}
-
-			if (rightAnchor > 0)
-				content.css("right", '${depth == 0 ? rightAnchor - content.width() / 2.0 : rightAnchor}px');
-
-			var box = content.get(0).getBoundingClientRect();
-			if (box.right > js.Browser.window.innerWidth) {
-				content.css("right", '0px');
-			}
 		}
 
 		function applyModifications(ctElement : Element) {
@@ -1736,6 +1835,12 @@ class Cell {
 							var sel = paramValue.find(":selected");
 							if (sel.val() != 0)
 								newCtValue.push(sel.text());
+							else
+								newCtValue.push("");
+						}
+						else if (paramValue.hasClass("select-root")) {
+							if (paramValue.val() != "None")
+								newCtValue.push(paramValue.val());
 							else
 								newCtValue.push("");
 						}
@@ -1881,7 +1986,7 @@ class Cell {
 
 			var selected = typeDropdown.val() == 0 ? null : customType.cases[typeDropdown.val()];
 			if (selected != null) {
-				ctValue.push(typeDropdown.val());
+				ctValue.push(Std.int(typeDropdown.val()));
 				for (idx in 0...selected.args.length) {
 					switch (selected.args[idx].type) {
 						case TId, TString, TRef(_):

@@ -4,6 +4,7 @@ class DynamicShader extends Shader {
 
 	@:c var shaderDef : {> hrt.prefab.Cache.ShaderDef, ?sclass : Class<hxsl.Shader>, ?isShaderGraph : Bool } = { shader : null, inits : null };
 	@:s var isInstance : Bool = false;
+	var template : DynamicShader;
 
 	public function new(parent,  shared: ContextShared) {
 		super(parent, shared);
@@ -23,13 +24,31 @@ class DynamicShader extends Shader {
 		return shaderDef.shader;
 	}
 
+	override function copy(data: Prefab) : Void {
+		super.copy(data);
+		template = cast data;
+	}
+
 	override function makeShader() {
 		if( getShaderDefinition() == null )
 			return null;
-		if( isInstance && !shaderDef.isShaderGraph )
+		var concrete = isInstance && !shaderDef.isShaderGraph;
+
+		#if !editor
+		// Optim: all copies of the same DynamicShader template
+		// directly clone the shader instance, which uses fast macro copies
+		if( template != null && concrete ) {
+			if( template.shader == null )
+				template.makeShader();
+			shader = template.shader.clone();
+			return shader;
+		}
+		#end
+
+		if( concrete )
 			shader = Type.createInstance(shaderDef.sclass,[]);
 		else {
-			var dshader = new hxsl.DynamicShader(shaderDef.shader);
+			var dshader = new hxsl.DynamicShader(shaderDef.shader, name);
 			for( v in shaderDef.inits ) {
 				dshader.hscriptSet(v.variable.name, v.value);
 			}
@@ -82,7 +101,7 @@ class DynamicShader extends Shader {
 	}
 
 	function loadShaderClass(opt=false) : Class<hxsl.Shader> {
-		var path = source;
+		var path = source ?? "";
 		if(StringTools.endsWith(path, ".hx")) path = path.substr(0, -3);
 		var cpath = path.split("/").join(".");
 		var cl = cast Type.resolveClass(cpath);
@@ -91,7 +110,7 @@ class DynamicShader extends Shader {
 	}
 
 	public function loadShaderDef() {
-		if(shaderDef.shader == null) {
+		if(shaderDef.shader == null && source != null) {
 			fixSourcePath();
 			if (StringTools.endsWith(source, ".shgraph")) {
 				shaderDef.isShaderGraph = true;
@@ -99,7 +118,7 @@ class DynamicShader extends Shader {
 				var shgraph = Std.downcast(res.toPrefab().load(), hrt.shgraph.ShaderGraph);
 				if (shgraph == null)
 					return;
-				var sh = shgraph.compile(null);
+				var sh = shgraph.compile({});
 				shaderDef.shader = sh.shader;
 				shaderDef.inits = sh.inits;
 				#if !editor
@@ -153,6 +172,7 @@ class DynamicShader extends Shader {
 
 	override function edit2(ctx:hrt.prefab.EditContext2) {
 		var isCorrupted = false;
+		var source = source ?? "";
 		if (StringTools.endsWith(source, ".shgraph")) {
 			var res = hxd.res.Loader.currentInstance.load(source);
 			var shgraph = Std.downcast(res.toPrefab().load(), hrt.shgraph.ShaderGraph);

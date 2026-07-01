@@ -111,6 +111,7 @@ class Particles extends h2d.Particles {
 }
 
 @:deprecated("Use Emitter2D instead")
+@:prefabHideInAddMenu
 class Particle2D extends Object2D {
 
 	@:s var paramsParticleGroup : Dynamic;
@@ -163,16 +164,6 @@ class Particle2D extends Object2D {
 		return particle2d;
 	}
 
-	#if editor
-
-	public static var emitter2dParams : Array<hrt.prefab.fx.EmitterHelper.ParamDef> = [
-		// EMIT PARAMS
-		{ name: "enable", t: PBool, disp: "Enable", def : 1.0, animate: true, groupName : "Emit Params" },
-		{ name: "speed", t: PFloat(), disp: "Initial Speed", def : 1.0, animate: true, groupName : "Emit Params" },
-		{ name: "speedIncr", t: PFloat(), disp: "Acceleration", def : 1.0, animate: true, groupName : "Emit Params" },
-		{ name: "gravity", t: PFloat(), disp: "Gravity", def : 1.0, animate: true, groupName : "Emit Params" }
-	];
-
 	override function makeInteractive():h2d.Interactive {
 		if(local2d == null)
 			return null;
@@ -183,6 +174,16 @@ class Particle2D extends Object2D {
 		int.x = int.y = -25;
 		return int;
 	}
+
+	#if editor
+
+	public static var emitter2dParams : Array<hrt.prefab.fx.EmitterHelper.ParamDef> = [
+		// EMIT PARAMS
+		{ name: "enable", t: PBool, disp: "Enable", def : 1.0, animate: true, groupName : "Emit Params" },
+		{ name: "speed", t: PFloat(), disp: "Initial Speed", def : 1.0, animate: true, groupName : "Emit Params" },
+		{ name: "speedIncr", t: PFloat(), disp: "Acceleration", def : 1.0, animate: true, groupName : "Emit Params" },
+		{ name: "gravity", t: PFloat(), disp: "Gravity", def : 1.0, animate: true, groupName : "Emit Params" }
+	];
 
 	override function edit( ctx : hide.prefab.EditContext ) {
 		super.edit(ctx);

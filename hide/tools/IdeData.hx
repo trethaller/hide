@@ -9,10 +9,14 @@ class IdeData {
 	public var database : cdb.Database = new cdb.Database();
 	public var fileWatcher : hide.tools.FileWatcher;
 
+	static final dBReloadMaxRetries = 5;
 	var databaseFile : String;
 	var databaseDiff : String;
 	var originDataBase : cdb.Database;
 	var dbWatcher : hide.tools.FileWatcher.FileWatchEvent;
+	public var shaderLoader : hide.tools.ShaderLoader;
+
+
 
 	var pakFile : hxd.fmt.pak.FileSystem;
 
@@ -91,6 +95,8 @@ class IdeData {
 				error(""+e);
 			}
 		}
+
+		shaderLoader = new hide.tools.ShaderLoader();
 	}
 
 	public function error( e : Dynamic ) {
@@ -191,7 +197,10 @@ class IdeData {
 	}
 
 	var lastDBContent = null;
-	function loadDatabase( ?checkExists ) {
+	var lastStats: Null<sys.FileStat> = null;
+	function loadDatabase( ?checkExists, retries: Int = 0) {
+
+
 		var exists = fileExists(databaseFile);
 		if( checkExists && !exists )
 			return; // cancel load
@@ -200,11 +209,24 @@ class IdeData {
 			database = loadedDatabase;
 			return;
 		}
+		var prevLoadedDatabase = lastDBContent;
+		var prevStats = lastStats;
 		try {
 			lastDBContent = getFileText(databaseFile);
+			lastStats = fileStat(databaseFile);
 			loadedDatabase.load(lastDBContent);
 		} catch( e : Dynamic ) {
-			error(e);
+			lastDBContent = prevLoadedDatabase;
+			lastStats = prevStats;
+
+			// Sometimes, loading the database can fail because getFileText returns an empty string
+			// this seems to happen when another program tries to write to to the file when we are trying to read it. In that
+			// case, we schedule another loadDatabase call in the future
+			if (retries < dBReloadMaxRetries) {
+				haxe.Timer.delay(() -> loadDatabase(checkExists, retries + 1), 100);
+			} else {
+				error(e);
+			}
 			return;
 		}
 		database = loadedDatabase;
@@ -226,8 +248,56 @@ class IdeData {
 			});
 	}
 
+	public static function openExternalFile(filePath: String) {
+		if(!haxe.io.Path.isAbsolute(filePath)) {
+			filePath = Ide.inst.getPath(filePath);
+		}
+
+		switch(Sys.systemName()) {
+			case "Windows":
+				// note : the "" is not a typo but a quirk in the way start use the first quoted argument as the
+				// window title when spawning a command, which we don't want
+				filePath = StringTools.replace(filePath, "/", "\\");
+				Sys.command('start "" "$filePath"');
+			case "Mac":
+				Sys.command('open "$filePath"');
+			case "Linux":
+				Sys.command('xdg-open "$filePath"');
+			default: throw "OpenExternalFile not implemented on this platform";
+		}
+	}
+
+	public static function showFileInExplorer(path : String) {
+		if(!haxe.io.Path.isAbsolute(path)) {
+			path = Ide.inst.getPath(path);
+		}
+
+		switch(Sys.systemName()) {
+			case "Windows": {
+				var cmd = "explorer.exe /select," + '"' + StringTools.replace(path, "/", "\\") + '"';
+				Sys.command(cmd);
+			};
+			case "Mac":	Sys.command("open " + haxe.io.Path.directory(path));
+			case "Linux":
+				Sys.command('dbus-send --session --dest=org.freedesktop.FileManager1 --type=method_call /org/freedesktop/FileManager1 org.freedesktop.FileManager1.ShowItems array:string:"$path" string:""');
+			default: throw "Exploration not implemented on this platform";
+		}
+	}
+
+
+	function databaseHasExternChanges() : Bool{
+		var stats = fileStat(databaseFile);
+		if( stats == null || lastStats == null )
+			return false;
+		return stats.mtime.getTime() > lastStats.mtime.getTime();
+	}
+
 	public function saveDatabase( ?forcePrefabs ) {
-		var lastStats = fileStat(databaseFile);
+		#if js
+		if (Ide.inst.thumbnailMode == true)
+			throw "Thumbnail generator can't save the cdb database";
+		#end
+
 		if( dbWatcher != null ) {
 			var b = fileWatcher.isChangePending(dbWatcher);
 			if( b ) {
@@ -236,10 +306,7 @@ class IdeData {
 		}
 
 		function checkBeforeWrite() {
-			var stats = fileStat(databaseFile);
-			if( stats == null || lastStats == null )
-				return;
-			if( stats.mtime.getTime() != lastStats.mtime.getTime() )
+			if (databaseHasExternChanges())
 				throw "Save when database is changed outside of Hide. Please reload Hide.";
 		}
 		#if js
@@ -266,6 +333,8 @@ class IdeData {
 				}
 
 				lastDBContent = database.save();
+				lastStats = fileStat(databaseFile);
+
 				checkBeforeWrite();
 				sys.io.File.saveContent(getPath(databaseFile), lastDBContent);
 				if ( dbWatcher != null )
@@ -319,10 +388,15 @@ class IdeData {
 	}
 
 	public function toJSON( v : Dynamic ) {
-		var str = haxe.Json.stringify(v, "\t");
-		str = ~/,\n\t+"__id__": [0-9]+/g.replace(str, "");
-		str = ~/\t+"__id__": [0-9]+,\n/g.replace(str, "");
-		return str;
+		var replaceFn =
+		#if( js_es == 5 )
+			// filter out `__id__` keys that are added when the objects are used as key in Maps (haxe -> js ECMA 5.0 behavior)
+			(key, value) -> key == "__id__" ? js.Lib.undefined : value;
+		#else
+			null;
+		#end
+
+		return haxe.Json.stringify(v, replaceFn, "\t");
 	}
 
 	public function loadPrefab<T:hrt.prefab.Prefab>( file : String, ?cl : Class<T>, ?checkExists ) : T {

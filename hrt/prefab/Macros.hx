@@ -297,6 +297,7 @@ class Macros {
 
 		var loadField = null;
 		var copyField = null;
+		var getEditorProps = null;
 		for (f in buildFields) {
 			if (f.name == "copy") {
 				copyField = f;
@@ -304,7 +305,79 @@ class Macros {
 			if (f.name == "load") {
 				loadField = f;
 			}
+
+
+			if (f.name == "getEditorProps") {
+				getEditorProps = f;
+			}
 		}
+
+
+		#if editor_hl
+
+		var metadatas = Context.getLocalClass().get().meta.get();
+		var prefabNameSimple = typeName.split(".").pop();
+
+		var prefabIcon = macro hrt.ui.HuiRes.ui.icons.question_mark;
+		var superExpr = macro {};
+		var prefabName = macro $v{prefabNameSimple};
+		var prefabHideInAddMenu = macro false;
+		var prefabCategory = macro "Misc";
+		if (typeName != "Prefab") {
+			superExpr = macro var _super = super.getEditorProps();
+			prefabCategory = macro _super.category;
+			prefabIcon = macro _super.icon;
+		}
+
+		for (meta in metadatas) {
+			if (meta.name == ":prefabIcon") {
+				if (meta.params.length != 1) {
+					Context.error(":prefabIcon need one argument expression that must resolve to a hxd.res.Image", meta.pos);
+				}
+				prefabIcon = meta.params[0];
+			}
+			if (meta.name == ":prefabName") {
+				if (meta.params.length != 1) {
+					Context.error(":prefabName need one String argument", meta.pos);
+				}
+				prefabName = meta.params[0];
+			}
+			if (meta.name == ":prefabHideInAddMenu") {
+				prefabHideInAddMenu = macro true;
+			}
+			if (meta.name == ":prefabCategory") {
+				if (meta.params.length != 1) {
+					Context.error(":prefabName need one String argument", meta.pos);
+				}
+				prefabCategory = meta.params[0];
+			}
+		}
+
+		var getEditorProps : Function = {
+			args: [],
+			expr: macro {
+				$e{superExpr};
+				return ({
+					icon: $e{prefabIcon},
+					name: $e{prefabName},
+					hideInAddMenu: $e{prefabHideInAddMenu},
+					category: $e{prefabCategory},
+				}:hrt.prefab.editor.Props);
+			}
+		};
+
+		var access = [APublic];
+		if (typeName != "Prefab")
+			access.push(AOverride);
+
+		buildFields.push({
+			name: "getEditorProps",
+			access: access,
+			kind: FFun(getEditorProps),
+			pos: Context.currentPos(),
+		});
+		#end
+
 
 		if (loadField != null && copyField == null) {
 			Context.error("Prefab \"" + typeName + "\" overrides load without overriding copy (data will be not properly initialized when cloning the prefab)", loadField.pos);

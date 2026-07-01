@@ -26,6 +26,9 @@ class ModelLibraryCache {
 }
 
 @:access(h3d.prim.HMDModel)
+@:prefabIcon(HuiRes.ui.icons.prefab.model_library)
+@:prefabName("Model Library")
+@:prefabCategory("3D")
 class ModelLibrary extends Prefab {
 
 	@:s var bakedMaterials : haxe.DynamicAccess<BakedMaterialData>;
@@ -762,7 +765,12 @@ class ModelLibrary extends Prefab {
 
 		var root = new hrt.prefab.Prefab(null, null);
 		root.addChild(this);
-		sys.io.File.saveContent(getSystemPath(path), haxe.Json.stringify(@:privateAccess root.serialize(), "\t"));
+		var content = #if editor
+			hide.Ide.inst.toJSON(@:privateAccess root.serialize());
+		#else
+			haxe.Json.stringify(@:privateAccess root.serialize());
+		#end
+		sys.io.File.saveContent(getSystemPath(path), content);
 	}
 
 	public static function createLibrary( dir : String, name : String, paths : Array<String> ) {

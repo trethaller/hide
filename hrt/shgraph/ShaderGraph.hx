@@ -395,11 +395,21 @@ class ShaderGraphGenContext {
 		return sortedNodes;
 	}
 }
+
+@:structInit
+class ShaderGraphCacheEntry {
+	public var lastTime : Float;
+	public var def: hrt.prefab.Cache.ShaderDef;
+}
+
 @:privateAccess(hrt.shgraph.Graph)
+@:prefabHideInAddMenu
 class ShaderGraph extends hrt.prefab.Prefab {
 
 	var graphs : Array<Graph> = [];
 	public var variables : Array<ShaderGraphVariable> = [];
+
+	static var shaderGraphCache: Map<String, ShaderGraphCacheEntry> = [];
 
 	var cachedDef : hrt.prefab.Cache.ShaderDef = null;
 
@@ -409,6 +419,27 @@ class ShaderGraph extends hrt.prefab.Prefab {
 		super.load(json);
 		graphs = [];
 		parametersAvailable = [];
+
+		if (cachedDef == null) {
+			var path = this.shared.prefabSource;
+			var cache = shaderGraphCache.get(path);
+			if (cache != null) {
+				#if (!release && (sys || nodejs))
+				var entry = try Std.downcast(hxd.res.Loader.currentInstance.load(this.shared.prefabSource).entry,hxd.fs.LocalFileSystem.LocalEntry) catch(e) null;
+				if (entry != null) {
+					var lastTime = @:privateAccess entry.getModifTime();
+					if (cache.lastTime >= lastTime) {
+						cachedDef = cache.def;
+					}
+				} else {
+					// If not a local entry, force the use of the cache
+					cachedDef = cache.def;
+				}
+				#else
+				cachedDef = cache.def;
+				#end
+			}
+		}
 
 		for (variable in json.variables ?? []) {
 			variables.push({
@@ -504,7 +535,8 @@ class ShaderGraph extends hrt.prefab.Prefab {
 		return dynamicType;
 	}
 
-	public function compile(?previewDomain: Domain) : hrt.prefab.Cache.ShaderDef {
+	public function compile(options: {?previewDomain: Domain, ?explicitVarNames: Bool}) : hrt.prefab.Cache.ShaderDef {
+		var previewDomain = options.previewDomain;
 		#if !editor
 		if ( cachedDef != null )
 			return cachedDef;
@@ -520,6 +552,7 @@ class ShaderGraph extends hrt.prefab.Prefab {
 
 
 		var nodeGen = new NodeGenContext(null, Vertex);
+		nodeGen.explicitVarNames = options.explicitVarNames ?? false;
 		nodeGen.previewDomain = previewDomain;
 
 		for (i => graph in graphs) {
@@ -562,46 +595,59 @@ class ShaderGraph extends hrt.prefab.Prefab {
 		externs.sort((a,b) -> Reflect.compare(a.paramIndex ?? -1, b.paramIndex ?? -1));
 
 		for (v in externs) {
-
 			// Patch unknow global variables to be locals instead with a dummy value
 			// so the preview shader doesn't crash
 			if (previewDomain != null && v.paramIndex == null) {
 				var fullName = AstTools.getFullName(v.v);
 				if (Variables.getGlobalNameMap().get(fullName) == null) {
-					AstTools.removeFromParent(v.v);
-					v.v.name =  StringTools.replace(fullName, ".", "_") + "_SG";
-					v.v.kind = Local;
+					var c = v.v;
+					var isInput = false;
 
-					var expr = switch (v.v.type) {
-						case TInt:
-							AstTools.makeInt(0);
-						case TFloat:
-							AstTools.makeFloat(0.0);
-						case TVec(size, VFloat):
-							AstTools.makeVec([for (i in 0...size) 0.0]);
-						case TMat3:
-							AstTools.makeGlobalCall(Mat3, [
-								AstTools.makeVec([1.0,0.0,0.0]),
-								AstTools.makeVec([0.0,1.0,0.0]),
-								AstTools.makeVec([0.0,0.0,1.0]),
-							], TMat3);
-						case TMat4:
-							AstTools.makeGlobalCall(Mat4, [
-								AstTools.makeVec([1.0,0.0,0.0,0.0]),
-								AstTools.makeVec([0.0,1.0,0.0,0.0]),
-								AstTools.makeVec([0.0,0.0,1.0,0.0]),
-								AstTools.makeVec([0.0,0.0,0.0,1.0]),
-							], TMat4);
-						case TChannel(_), TSampler(T2D, false):
-							v.v.name = "blackChannel";
-							v.v.kind = Global;
-							null;
-						default:
-							throw 'Can not default initialize global vaiable $fullName in preview shader (type ${v.v.type})';
+					// only patch unknown inputs
+					while(c != null) {
+						if (c.kind == Input) {
+							isInput = true;
+							break;
+						}
+						c = c.parent;
+					}
+					if (isInput) {
+						AstTools.removeFromParent(v.v);
+						v.v.name =  StringTools.replace(fullName, ".", "_") + "_SG";
+						v.v.kind = Local;
+
+						var expr = switch (v.v.type) {
+							case TInt:
+								AstTools.makeInt(0);
+							case TFloat:
+								AstTools.makeFloat(0.0);
+							case TVec(size, VFloat):
+								AstTools.makeVec([for (i in 0...size) 0.0]);
+							case TMat3:
+								AstTools.makeGlobalCall(Mat3, [
+									AstTools.makeVec([1.0,0.0,0.0]),
+									AstTools.makeVec([0.0,1.0,0.0]),
+									AstTools.makeVec([0.0,0.0,1.0]),
+								], TMat3);
+							case TMat4:
+								AstTools.makeGlobalCall(Mat4, [
+									AstTools.makeVec([1.0,0.0,0.0,0.0]),
+									AstTools.makeVec([0.0,1.0,0.0,0.0]),
+									AstTools.makeVec([0.0,0.0,1.0,0.0]),
+									AstTools.makeVec([0.0,0.0,0.0,1.0]),
+								], TMat4);
+							case TChannel(_), TSampler(T2D, false):
+								v.v.name = "blackChannel";
+								v.v.kind = Global;
+								null;
+							default:
+								throw 'Can not default initialize global vaiable $fullName in preview shader (type ${v.v.type})';
+						}
+
+						if (expr != null)
+							v.__init__ = AstTools.makeAssign(AstTools.makeVar(v.v), expr);
 					}
 
-					if (expr != null)
-						v.__init__ = AstTools.makeAssign(AstTools.makeVar(v.v), expr);
 				}
 			}
 
@@ -655,12 +701,22 @@ class ShaderGraph extends hrt.prefab.Prefab {
 		@:privateAccess shared.data = shaderData;
 		@:privateAccess shared.initialize();
 
-		cachedDef = {shader : shared, inits: inits}
+		cachedDef = {shader : shared, inits: inits};
+
+		var lastTime = 0.0;
+		#if (!release && (sys || nodejs))
+		var entry = try Std.downcast(hxd.res.Loader.currentInstance.load(this.shared.prefabSource).entry,hxd.fs.LocalFileSystem.LocalEntry) catch(e) null;
+		if (entry != null) {
+			lastTime = @:privateAccess entry.getModifTime();
+		}
+		#end
+		shaderGraphCache.set(this.shared.prefabSource, {lastTime: lastTime, def: cachedDef});
+
 		return cachedDef;
 	}
 
 	public function makeShaderInstance() : hxsl.DynamicShader {
-		var def = compile(null);
+		var def = compile({});
 		var s = new hxsl.DynamicShader(def.shader);
 		for (init in def.inits)
 			setParamValue(s, init.variable, init.value);
@@ -780,6 +836,53 @@ class ShaderGraph extends hrt.prefab.Prefab {
 	public function getGraph(domain: Domain) {
 		return graphs[domain.getIndex()];
 	}
+
+	#if editor
+	static var removeFnRegex = ~/@function var.*$/gm;
+	static var trimWhitepsaceStart = ~/^\s*/;
+	static var trimWhitepsaceEnd = ~/\s*$/;
+	static var removeLocal = ~/@local\s*/gm;
+
+	static public function convertToHXSL(shgraphPath: String, hxslPath: String) {
+ 		var shaderGraph = Std.downcast(hide.Ide.inst.loadPrefab(shgraphPath, null,  true), hrt.shgraph.ShaderGraph);
+
+		var hxslPathSanitised = StringTools.replace(hxslPath, "\\", "/");
+		var path = hxslPathSanitised.split("/");
+		var className = path.pop().split(".").shift();
+		if (!path.contains("src"))
+		{
+			hide.Ide.inst.error("target hx file should be in the src of the project, aborting");
+			return;
+		}
+		while(path.length > 0 && path.shift() != "src") {
+		}
+		var cp = path.join(".");
+
+		var code = hxsl.Printer.shaderToString(shaderGraph.compile({explicitVarNames: true}).shader.data, false);
+		code = removeFnRegex.replace(code, "");
+		code = trimWhitepsaceStart.replace(code, "");
+		code = trimWhitepsaceEnd.replace(code, "");
+		code = removeLocal.replace(code, "");
+		code = code.split("\n").join("\n\t\t");
+
+		var toGen =
+'package $cp;
+
+class $className extends hxsl.Shader {
+	static var SRC = {
+		$code
+	}
+}
+';
+
+		sys.io.File.saveContent(hxslPath, toGen);
+		var oldPath = hide.Ide.inst.makeRelative(shgraphPath);
+		var newPath = path.join("/") + "/" + className + ".hx";
+		if(hide.Ide.inst.confirm('Replace $oldPath with $newPath in the project files ? (Can\'t undo !)')) {
+			hide.tools.FileManager.replacePathInFiles([{from: oldPath, to:  newPath}]);
+		}
+	}
+	#end
 }
 
 class Graph {

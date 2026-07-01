@@ -2,10 +2,29 @@ package hrt.ui;
 
 #if hui
 
+class HuiSceneEvents extends hxd.SceneEvents {
+	public var huiScene: HuiScene;
+
+	override function selectCursor() {
+		var cur : hxd.Cursor = defaultCursor;
+		for ( o in overList ) {
+			if ( o.cursor != null ) {
+				cur = o.cursor;
+				break;
+			}
+		}
+		switch( cur ) {
+			case Callback(f): f();
+			default: huiScene.interactive.cursor = cur;
+		}
+	}
+}
+
 class HuiScene extends HuiElement {
 	static var SRC =
 	<hui-scene>
 		<bitmap public id="display"/>
+		<hui-error-display id="error"/>
 	</hui-scene>
 
 	/**Clear color of the 3d scene. Must include the alpha component in order to be visible**/
@@ -13,8 +32,16 @@ class HuiScene extends HuiElement {
 
 	public var s2d : h2d.Scene;
 	public var s3d : h3d.scene.Scene;
-	public var s3dinter: Hui3DInteractiveScene;
+	public var sceneEvents : HuiSceneEvents;
+	public var disableSceneRender : Bool = false;
+
 	var renderTexture : h3d.mat.Texture;
+
+	#if editor_hl
+	public var showSceneInfos(default, set) : Bool = false;
+	var sceneInfos : HuiSceneInfos;
+	function set_showSceneInfos(v) { sceneInfos.visible = v; return showSceneInfos = v; }
+	#end
 
 	override function set_enableInteractive(b:Bool):Bool {
 		if( enableInteractive == b )
@@ -22,9 +49,10 @@ class HuiScene extends HuiElement {
 		if( b ) {
 			if( interactive == null ) {
 				var interactive = new Interactive2(0, 0);
+				interactive.huiScene = this;
 				addChildAt(interactive,0);
 				this.interactive = interactive;
-				interactive.cursor = Default;
+				interactive.cursor = null;
 				getProperties(interactive).isAbsolute = true;
 				if( !needReflow ) {
 					interactive.width = calculatedWidth;
@@ -41,14 +69,38 @@ class HuiScene extends HuiElement {
 		return enableInteractive = b;
 	}
 
+
 	public function new(?parent: h2d.Object) {
 		super(parent);
 		initComponent();
 
-
-
 		s2d = new h2d.Scene();
 		s3d = new h3d.scene.Scene(false, false);
+
+		if (renderTexture == null) {
+			renderTexture = new h3d.mat.Texture(1,1, [Target]);
+			renderTexture.depthBuffer = new h3d.mat.Texture(1,1, hxd.PixelFormat.Depth24Stencil8);
+			renderTexture.clear(0x000000);
+			display.tile = h2d.Tile.fromTexture(renderTexture);
+		}
+
+
+		sceneEvents = new HuiSceneEvents();
+		sceneEvents.huiScene = this;
+		@:privateAccess hxd.Window.getInstance().removeEventTarget(sceneEvents.onEvent);
+
+		var base = uiBase;
+		sceneEvents.addScene(s2d);
+		sceneEvents.addScene(s3d);
+
+		makeInteractive();
+		propagateEvents = true;
+
+		#if editor_hl
+		sceneInfos = new HuiSceneInfos(this, this);
+		showSceneInfos = showSceneInfos;
+		#end
+
 		// new h3d.scene.Box(0x000000, s3d);
 		// var t = new h2d.Text(hxd.res.DefaultFont.get(), s2d);
 		// t.text = "Hello scene";
@@ -75,26 +127,16 @@ class HuiScene extends HuiElement {
 		if (currentVisible != wasVisible) {
 			wasVisible = currentVisible;
 			var base = uiBase;
-
-			if (currentVisible) {
-				s3dinter = new Hui3DInteractiveScene(this);
-				base.app.sevents.addScene(s3dinter,0);
-				base.app.sevents.addScene(s2d,0);
-			} else {
-				base.app.sevents.removeScene(s3dinter);
-				base.app.sevents.removeScene(s2d);
-			}
 		}
 
 		if (currentVisible) {
 			var scene = getScene();
 			var scale = getScene().viewportScaleX;
 
-			s3d.scenePosition = s3d.scenePosition ?? {offsetX: 0, offsetY: 0, width: 0, height: 0};
-			s3d.scenePosition.offsetX = display.absX * scale;
-			s3d.scenePosition.offsetY = display.absY * scale;
-			s3d.scenePosition.width = Std.int(display.width * scale);
-			s3d.scenePosition.height = Std.int(display.height * scale);
+			sceneEvents.checkEvents();
+
+			s3d.setElapsedTime(hxd.Timer.dt);
+			s2d.setElapsedTime(hxd.Timer.dt);
 		}
 
 		super.sync(ctx);
@@ -106,11 +148,6 @@ class HuiScene extends HuiElement {
 		var textureWidth = hxd.Math.iclamp(hxd.Math.round(innerWidth * scale) , 1, 4096);
 		var textureHeight = hxd.Math.iclamp(hxd.Math.round(innerHeight * scale) , 1, 4096);
 
-		if (renderTexture == null) {
-			renderTexture = new h3d.mat.Texture(1,1, [Target]);
-			renderTexture.depthBuffer = new h3d.mat.Texture(1,1, hxd.PixelFormat.Depth24Stencil8);
-		}
-
 		if(renderTexture.width != textureWidth || renderTexture.height != textureHeight) {
 			renderTexture.resize(textureWidth, textureHeight);
 			renderTexture.depthBuffer.resize(textureWidth, textureHeight);
@@ -119,15 +156,14 @@ class HuiScene extends HuiElement {
 
 		display.width = innerWidth;
 		display.height = innerHeight;
-
-		s2d.scaleMode = Stretch(innerWidth, innerHeight);
+		s2d.scaleMode = Custom(innerWidth, innerHeight, scale, scale);
 		var pos = this.getAbsPos().getPosition();
-		@:privateAccess s2d.offsetX = pos.x;
-		@:privateAccess s2d.offsetY = pos.y;
+		@:privateAccess s2d.offsetX = pos.x * scale;
+		@:privateAccess s2d.offsetY = pos.y  * scale;
 
 		var scenePosition = {
-			offsetX : pos.x,
-			offsetY : pos.y,
+			offsetX : pos.x * scale,
+			offsetY : pos.y * scale,
 			width : Std.int(innerWidth),
 			height : Std.int(innerHeight)
 		};
@@ -142,7 +178,6 @@ class HuiScene extends HuiElement {
 
 		var base = uiBase;
 		base.app.sevents.removeScene(s2d);
-		base.app.sevents.removeScene(s3dinter);
 
 		if (renderTexture != null) {
 			renderTexture.dispose();
@@ -152,8 +187,6 @@ class HuiScene extends HuiElement {
 
 	override function draw(ctx:h2d.RenderContext) {
 		if (renderTexture != null) {
-
-
 			var prevRZ = ctx.getCurrentRenderZone();
 			@:privateAccess ctx.clearRZ();
 
@@ -161,10 +194,25 @@ class HuiScene extends HuiElement {
 
 			s3d.setOutputTarget(ctx.engine, renderTexture);
 			engine.clear(backgroundColor, 1.0);
-			s3d.setElapsedTime(hxd.Timer.dt);
-			s3d.render(ctx.engine);
-			s2d.setElapsedTime(hxd.Timer.dt);
-			s2d.render(ctx.engine);
+
+			var anyError = false;
+			try {
+				if (!disableSceneRender) {
+					s3d.render(ctx.engine);
+					#if editor_hl
+					if (sceneInfos.visible)
+						sceneInfos.updateStats(ctx.engine);
+					#end
+					s2d.render(ctx.engine);
+				}
+			} catch(e) {
+				anyError = true;
+				error.setError("Scene render failed", e);
+			}
+
+			if (!anyError) {
+				error.clearError();
+			}
 
 			s3d.setOutputTarget();
 
@@ -173,94 +221,140 @@ class HuiScene extends HuiElement {
 
 			@:privateAccess ctx.initShaders(ctx.baseShaderList);
 			ctx.setCurrent();
-
 		}
 	}
-}
 
-@:access(hrt.ui.HuiScene)
-@:access(h3d.scene.Scene)
-class Hui3DInteractiveScene implements hxd.SceneEvents.InteractiveScene {
-	var huiScene: HuiScene;
-	var dummyInteractive : Hui3DInteractive;
-
-	public function new(huiScene: HuiScene) {
-		this.huiScene = huiScene;
-		dummyInteractive = new Hui3DInteractive(this);
-	}
-
-	public function setEvents( s : hxd.SceneEvents ) : Void {
-		huiScene.s3d.events = s;
-	};
-	public function handleEvent( e : hxd.Event, last : hxd.SceneEvents.Interactive ) : hxd.SceneEvents.Interactive {
-		var i = huiScene.s3d.handleEvent(e, last);
-		if (i == null) {
-			var x = e.relX - huiScene.s3d.scenePosition?.offsetX;
-			var y = e.relY - huiScene.s3d.scenePosition?.offsetY;
-
-			var base = huiScene.uiBase;
-
-			if (x >= 0 && y >= 0 && x < huiScene.s3d.scenePosition?.width && y < huiScene.s3d.scenePosition?.height) {
-
-				dispatchListeners(e);
-				e.propagate = false;
-
-				return dummyInteractive;
-			}
-		}
-		return i;
-	};
-	public function dispatchEvent( e : hxd.Event, to : hxd.SceneEvents.Interactive ) : Void {
-		if (Std.downcast(to, Hui3DInteractive) != null) {
-			return;
-		}
-		huiScene.s3d.dispatchEvent(e, to);
-	};
-	public function dispatchListeners( e : hxd.Event ) : Void {
-		huiScene.s3d.dispatchListeners(e);
-	};
-	public function isInteractiveVisible( i : hxd.SceneEvents.Interactive ) : Bool {
-		if (Std.downcast(i, Hui3DInteractive) != null) {
-			return true;
-		}
-		return huiScene.s3d.isInteractiveVisible(i);
-	};
-}
-
-class Hui3DInteractive implements hxd.SceneEvents.Interactive {
-	public var propagateEvents : Bool;
-	var interactiveScene: Hui3DInteractiveScene;
-
-	public function new(interactiveScene: Hui3DInteractiveScene) {
-		this.interactiveScene = interactiveScene;
-		propagateEvents = false;
-	}
-
-	public var cursor(default, set) : hxd.Cursor;
-
-	function set_cursor(v) {
-		return cursor = v;
-	}
-
-	public function handleEvent( e : hxd.Event ) : Void {
-
-	};
-
-	public function getInteractiveScene() : hxd.SceneEvents.InteractiveScene {
-		return interactiveScene;
-	};
 }
 
 class Interactive2 extends h2d.Interactive {
 	public var huiScene: HuiScene;
+	var capturing = false;
 	override function handleEvent( e : hxd.Event ) {
+		handleEvent2(e, true);
+	}
+
+	function handleEvent2(e: hxd.Event, fixPos: Bool) {
 		super.handleEvent(e);
-		e.propagate = true;
-		var i = huiScene.s3d.handleEvent(e, null);
-		if (i == null) {
-			huiScene.s3d.dispatchListeners(e);
+
+		if (!e.propagate)
+			return;
+		var scale = huiScene.getScene().viewportScaleX;
+
+		var newEvent = e;
+
+		if (fixPos) {
+			var clone = new hxd.Event(e.kind, e.relX, e.relY);
+
+			// replace global events in screenSpace
+			clone.relX += huiScene.absX * scale;
+			clone.relY += huiScene.absY * scale;
+
+			clone.relZ = e.relZ;
+			clone.propagate = e.propagate;
+			clone.cancel = e.cancel;
+			clone.button = e.button;
+			clone.touchId = e.touchId;
+			clone.keyCode = e.keyCode;
+			clone.charCode = e.charCode;
+			clone.wheelDelta = e.wheelDelta;
+			newEvent = clone;
 		}
+
+		if (newEvent.kind == EPush) {
+			capturing = true;
+			@:privateAccess getScene().events.startCapture((e) -> {
+					handleEvent2(e, false);
+				}, () -> {
+				capturing = false;
+			});
+		} else if (capturing && (newEvent.kind == ERelease || newEvent.kind == EReleaseOutside)) {
+			@:privateAccess getScene().events.stopCapture();
+		}
+
+		@:privateAccess huiScene.sceneEvents.onEvent(newEvent);
+
+		// stop propagaion for original event
 		e.propagate = false;
+	}
+}
+
+class HuiSceneInfos extends HuiElement {
+	static var SRC = <hui-scene-infos class="vertical">
+		<hui-text("Statistics") class="title"/>
+		<hui-text("Scene") class="sub-title"/>
+		<hui-element class="horizontal">
+			<hui-text("FPS : ") class="label"/>
+			<hui-text("78") id="fps"/>
+		</hui-element>
+		<hui-element class="horizontal">
+			<hui-text("Scene objects : ") class="label"/>
+			<hui-text("78") id="scene-obj-count"/>
+		</hui-element>
+		<hui-element class="horizontal">
+			<hui-text("Interactives 3D : ") class="label"/>
+			<hui-text("78") id="int-3d"/>
+		</hui-element>
+		<hui-element class="horizontal">
+			<hui-text("Interactives 2D : ") class="label"/>
+			<hui-text("78") id="int-2d"/>
+		</hui-element>
+
+		<hui-text("Graphics") class="sub-title"/>
+		<hui-element class="horizontal">
+			<hui-text("Triangles : ") class="label"/>
+			<hui-text("78") id="triangles-count"/>
+		</hui-element>
+		<hui-element class="horizontal">
+			<hui-text("Buffers : ") class="label"/>
+			<hui-text("78") id="buffers-count"/>
+		</hui-element>
+		<hui-element class="horizontal">
+			<hui-text("Textures : ") class="label"/>
+			<hui-text("78") id="tex-count"/>
+		</hui-element>
+		<hui-element class="horizontal">
+			<hui-text("Draw Calls : ") class="label"/>
+			<hui-text("78") id="draw-calls-count"/>
+		</hui-element>
+		<hui-element class="horizontal">
+			<hui-text("V Ram : ") class="label"/>
+			<hui-text("78") id="vram-count"/>
+		</hui-element>
+	</hui-scene-infos>
+
+	var scene : HuiScene;
+
+	public function new(scene : HuiScene, ?parent: h2d.Object) {
+		super(parent);
+		initComponent();
+		this.scene = scene;
+	}
+
+	public function updateStats(engine: h3d.Engine) {
+		function splitCentaines(v: Int) {
+			var str = Std.string(v);
+			var endStr = "";
+			for (char in 0...str.length) {
+				if (char % 3 == 0 && char > 0) {
+					endStr = " " + endStr;
+				}
+				endStr = str.charAt(str.length - char - 1) + endStr;
+			}
+			return endStr;
+		}
+
+		var memStats = engine.mem.stats();
+
+		// Scene stats
+		fps.text = '${Math.round(@:privateAccess engine.realFps)}';
+		sceneObjCount.text = '${splitCentaines(scene.s3d.getObjectsCount())}';
+
+		// Graphics stats
+		trianglesCount.text = '${splitCentaines(Std.int(engine.drawTriangles))}';
+		buffersCount.text = '${splitCentaines(memStats.bufferCount)}';
+		texCount.text = '${splitCentaines(memStats.textureCount)}';
+		drawCallsCount.text = '${splitCentaines(engine.drawCalls)}';
+		vramCount.text = '${Std.int(memStats.totalMemory / (1024 * 1024))} Mb';
 	}
 }
 

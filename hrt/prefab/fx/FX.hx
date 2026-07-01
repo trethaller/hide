@@ -21,6 +21,27 @@ enum FXPlayState {
 class FXAnimation extends h3d.scene.Object {
 	public static var defaultCullingDistance = 0.0;
 
+	public static var debugFX(default, null) = false;
+	static var debugRFX : DesaturateRFX;
+
+	// Note : to work, the renderer need to have a Debug pass enabled
+	public static function setDebugFX(?enabled: Bool, renderer: h3d.scene.Renderer) {
+		if (enabled == null)
+			enabled = !debugFX;
+
+		if (debugFX == enabled)
+			return;
+
+		debugFX = enabled;
+		if (debugFX) {
+			debugRFX = new DesaturateRFX();
+			renderer.effects.push(debugRFX);
+		} else {
+			renderer.effects.remove(debugRFX);
+			debugRFX = null;
+		}
+	}
+
 	public var onEnd : Void -> Void;
 	public var playSpeed : Float = 0;
 	public var localTime : Float = 0.0;
@@ -30,6 +51,12 @@ class FXAnimation extends h3d.scene.Object {
 	public var loopEnd: Float = -1;
 	public var hasLoopPoints(default, null): Bool = false;
 	public var duration : Float;
+	public var prefab : FX;
+
+	var fxId = fxCount ++;
+	static var fxCount = 0;
+
+	public var debugShader : DebugFXShader;
 
 	function set_loop(v: Bool) {
 		loop = v;
@@ -42,10 +69,10 @@ class FXAnimation extends h3d.scene.Object {
 		return playState;
 	}
 
-		/** Enable automatic culling based on `cullingRadius` and `cullingDistance`. Will override `culled` on every sync. **/
+	/** Enable automatic culling based on `cullingRadius` and `cullingDistance`. Will override `culled` on every sync. **/
 	public var autoCull(default, set) = true;
 	public var cullingRadius : Float;
-	public var cullingDistance = defaultCullingDistance;
+	public var cullingDistance : Float;
 
 	public var objAnims: Array<ObjectAnimation>;
 	public var events: Array<hrt.prefab.fx.Event.EventInstance>;
@@ -80,6 +107,7 @@ class FXAnimation extends h3d.scene.Object {
 	}
 
 	function init(def: FX, ?root: PrefabElement) {
+		this.prefab = def;
 		if(root == null)
 			root = def;
 
@@ -244,6 +272,52 @@ class FXAnimation extends h3d.scene.Object {
 
 	static var tmpSphere = new h3d.col.Sphere();
 	override function syncRec(ctx:h3d.scene.RenderContext) {
+		if (debugFX) {
+			if (debugShader == null) {
+				debugShader = new DebugFXShader();
+
+				debugShader.setPriority(-99999);
+
+				var mats = getMaterials(true);
+
+				for (m in mats) {
+					var pass = m.allocPass("debug", true);
+					if (pass.getShader(DebugFXShader) == null) {
+						pass.addShader(debugShader);
+					}
+					pass.depthTest = Always;
+					pass.setBlendMode(None);
+					pass.culling = None;
+				}
+
+				if (emitters != null) {
+					for (emitter in emitters) {
+						emitter.batch.shadersChanged = true;
+					}
+				}
+			}
+
+			if (fixedPosition) {
+				// display fixed position fx in red (color is in hsv)
+				debugShader.color.set(0.0,1.0,1.0);
+			} else {
+				// Hash color of fx with its id so each fx has a different color
+				debugShader.color.set((fxId * 1.618033988749) % 1.0, 0.75, 0.75);
+			}
+		} else if (debugShader != null) {
+			var mats = getMaterials(true);
+			for (m in mats) {
+				m.removePass(m.getPass("debug"));
+			}
+			debugShader = null;
+
+			if (emitters != null) {
+				for (emitter in emitters) {
+					emitter.batch.shadersChanged = true;
+				}
+			}
+		}
+
 		var changed = posChanged;
 		if( changed ) calcAbsPos();
 
@@ -280,7 +354,7 @@ class FXAnimation extends h3d.scene.Object {
 			}
 		}
 
-		for (t in trails) {
+		for (t in trails ?? []) {
 			t.timeScale = 0.0;
 		}
 
@@ -410,7 +484,7 @@ class FXAnimation extends h3d.scene.Object {
 
 		if (fullSync) {
 
-			for (t in trails) {
+			for (t in trails ?? []) {
 				t.update(hxd.Math.max(dt, 0.0));
 			}
 
@@ -489,7 +563,7 @@ class FXAnimation extends h3d.scene.Object {
 	function syncAnims(newTime: Float, dt: Float) {
 		if(objAnims != null) {
 			for(anim in objAnims) {
-				if(anim.scale != null || anim.rotation != null || anim.position != null) {
+				if(anim.obj != null && (anim.scale != null || anim.rotation != null || anim.position != null)) {
 					var m = tempMat;
 					if(anim.scale != null) {
 						var scale = evaluator.getVector(anim.scale, newTime, tempVec);
@@ -811,12 +885,14 @@ typedef Parameter = {
 	var def: Dynamic;
 };
 
+@:prefabHideInAddMenu
 class FX extends Object3D implements BaseFX {
 
 	@:s public var duration : Float;
 	@:s public var startDelay : Float = 0.0;
 	@:c public var scriptCode : String;
 	@:s public var cullingRadius : Float;
+	@:s public var cullingDistance : Float;
 	@:s public var markers : Array<{t: Float}> = [];
 
 	@:s public var parameters : Array<Parameter> = [];
@@ -850,6 +926,7 @@ class FX extends Object3D implements BaseFX {
 		var fxanim = createInstance(parent3d);
 		fxanim.duration = duration;
 		fxanim.cullingRadius = cullingRadius;
+		fxanim.cullingDistance = cullingDistance > 0 ? cullingDistance : FXAnimation.defaultCullingDistance;
 
 		var p = fxanim.parent;
 		while(p != null) {
@@ -917,6 +994,7 @@ class FX extends Object3D implements BaseFX {
 				<dl>
 					<dt>Duration</dt><dd><input type="number" value="0" field="duration"/></dd>
 					<dt>Culling radius</dt><dd><input type="number" field="cullingRadius"/></dd>
+					<dt>Culling distance</dt><dd><input type="number" field="cullingDistance"/></dd>
 				</dl>
 			</div>');
 		ctx.properties.add(props, this, function(pname) {
@@ -1092,4 +1170,69 @@ class FX extends Object3D implements BaseFX {
 
 	// TOCO(ces) : restore extension support
 	static var _ = Prefab.register("fx", FX, "fx");
+}
+
+class DebugFXShader extends hxsl.Shader {
+	static var SRC = {
+		@param var color : Vec4;
+
+		@:import h3d.shader.ColorSpaces;
+		@const var reverseDepth : Bool;
+
+
+		var output : { color : Vec4 };
+		function fragment() {
+			var c = color.rgb;
+
+			output.color.rgb = hsv2rgb(color.rgb);
+			if (output.color.a < 0.01)
+				discard;
+			output.color.a = 1.0;
+		}
+	}
+}
+class Desaturate extends h3d.shader.ScreenShader {
+	static var SRC = {
+		@param var texture: Sampler2D;
+
+		function fragment() {
+			var input = texture.get(calculatedUV);
+			pixelColor.rgb = vec3((input.r + input.g + input.g) / 3.0);
+		}
+	}
+}
+
+class DesaturateRFX implements h3d.impl.RendererFX {
+	var desaturatePass = new h3d.pass.ScreenFx(new Desaturate());
+	public var enabled: Bool = true;
+
+	public function new() {
+
+	}
+
+	public function start(r : h3d.scene.Renderer) {
+	}
+
+	public function begin(r : h3d.scene.Renderer, step: h3d.impl.RendererFX.Step) {
+		if (step == Overlay) {
+			var pbr = Std.downcast(r, h3d.scene.pbr.Renderer);
+			desaturatePass.shader.texture = @:privateAccess pbr.textures.ldr;
+			desaturatePass.render();
+		}
+	}
+
+	public function end(r : h3d.scene.Renderer, step: h3d.impl.RendererFX.Step) {
+
+	}
+
+	public function dispose() : Void {};
+
+	// Volumetric RFX
+	public function modulate( t : Float ) : h3d.impl.RendererFX {
+		return this;
+	};
+
+	public function transition( r1 : h3d.impl.RendererFX, r2 : h3d.impl.RendererFX ) : h3d.impl.RendererFX.RFXTransition {
+		return {effect: this, setFactor : (f: Float) -> {}}
+	};
 }

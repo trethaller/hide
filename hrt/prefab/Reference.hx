@@ -10,6 +10,8 @@ enum EditMode {
 	/** The reference can be edited, and saving it will save a diff between the original prefab and this in the `overrides` field **/
 	Override;
 }
+
+@:prefabIcon(HuiRes.ui.icons.prefab.reference)
 class Reference extends Object3D {
 	/**
 		The referenced prefab loaded by this reference
@@ -34,7 +36,7 @@ class Reference extends Object3D {
 	**/
 	public var originalSource : Dynamic;
 
-	#if editor
+	#if (editor || editor_hl)
 	var wasMade : Bool = false;
 	#end
 
@@ -46,7 +48,7 @@ class Reference extends Object3D {
 	}
 
 	override function save() {
-		#if editor
+		#if (editor || editor_hl)
 		if (editMode == Override && refInstance != null) {
 			this.overrides = computeDiffFromSource();
 		} else if (editMode == Edit && refInstance != null) {
@@ -77,7 +79,7 @@ class Reference extends Object3D {
 
 		super.load(obj);
 
-		#if !editor
+		#if !(editor || editor_hl)
 		if (source != null && shouldBeInstanciated() && hxd.res.Loader.currentInstance?.exists(source)) {
 			initRefInstance();
 		}
@@ -89,7 +91,7 @@ class Reference extends Object3D {
 		super.copy(obj);
 		var otherRef : Reference = cast obj;
 
-		#if editor
+		#if (editor || editor_hl)
 		try {
 			originalSource = @:privateAccess hxd.res.Loader.currentInstance.load(source).toPrefab().loadData();
 		} catch (e) {
@@ -99,7 +101,7 @@ class Reference extends Object3D {
 
 		// Clone the refInstance from the original prefab on copy
 		if (source != null && shouldBeInstanciated()) {
-			var newVersion = hxd.res.Loader.currentInstance.load(source).toPrefab().reloadedVersion;
+			var newVersion = try hxd.res.Loader.currentInstance.load(source).toPrefab().reloadedVersion catch(e) -1;
 			if (newVersion != otherRef.refInstanceVersion) {
 				otherRef.refInstance = null;
 				otherRef.initRefInstance();
@@ -114,7 +116,7 @@ class Reference extends Object3D {
 		}
 	}
 
-	#if editor
+	#if (editor || editor_hl)
 	override function shouldBeInstanciated() {
 		if (!super.shouldBeInstanciated())
 			return false;
@@ -143,7 +145,7 @@ class Reference extends Object3D {
 		var shouldLoad = refInstance == null && source != null;
 		shouldLoad = shouldLoad && shouldBeInstanciated();
 
-		#if editor
+		#if (editor || editor_hl)
 		if (hasCycle())
 			shouldLoad = false;
 		#end
@@ -168,12 +170,12 @@ class Reference extends Object3D {
 		if (shared.parentPrefab != null && editorOnly)
 			return null;
 
-		#if editor
+		#if (editor || editor_hl)
 		try {
 		#end
 			var res = @:privateAccess hxd.res.Loader.currentInstance.load(source).toPrefab();
 
-			#if editor
+			#if (editor || editor_hl)
 			if (editMode == Override) {
 				originalSource = @:privateAccess res.loadData();
 			}
@@ -197,7 +199,7 @@ class Reference extends Object3D {
 
 			refInstance.shared.parentPrefab = this;
 
-		#if editor
+		#if (editor || editor_hl)
 		} catch (e) {
 			return null;
 		}
@@ -210,6 +212,17 @@ class Reference extends Object3D {
 		if( source == null )
 			return;
 
+		#if editor_hl
+		if (hasCycle()) {
+			throw 'Cyclic reference';
+			return;
+		}
+
+		if (!hxd.res.Loader.currentInstance.exists(source)) {
+			throw 'Source prefab `${source}` does not exist';
+			return;
+		}
+		#end
 
 		// in the case source has changed since the last load (can happen when creating references manually)
 		if (refInstance?.shared.currentPath != source) {
@@ -264,7 +277,7 @@ class Reference extends Object3D {
 			refInstance.make();
 		}
 
-		#if editor
+		#if (editor || editor_hl)
 		wasMade = true;
 		#end
 	}
@@ -316,7 +329,7 @@ class Reference extends Object3D {
 	}
 
 	function resetRefInstance() {
-		#if editor
+		#if (editor || editor_hl)
 		editorRemoveObjects();
 		#end
 
@@ -364,6 +377,43 @@ class Reference extends Object3D {
 			}
 		};
 
+	}
+
+	override function makeInteractive() {
+		if( editMode != None )
+			return null;
+		return super.makeInteractive();
+	}
+
+	/**
+		Returns true if this reference has a cycle,
+		meaning that references depends on each other
+	**/
+	public function hasCycle() : Bool {
+
+		function rec(prefab: Prefab, seenPaths: Map<String, Bool>) : Bool {
+			if (prefab == null)
+				return false;
+
+			var ref = Std.downcast(prefab, Reference);
+			if (ref != null && ref.source != null && ref.shouldBeInstanciated() && !ref.editorOnly) {
+				if (seenPaths.get(ref.source) == true) {
+					return true;
+				}
+
+				seenPaths.set(ref.source, true);
+				if (rec(ref.resolve(), seenPaths.copy()))
+					return true;
+			}
+			for (child in prefab.children) {
+				if(rec(child, seenPaths.copy()))
+					return true;
+			}
+
+			return false;
+		}
+
+		return rec(this, [this.shared.currentPath => true]);
 	}
 
 
@@ -418,43 +468,6 @@ class Reference extends Object3D {
 
 		refInstance = Prefab.createFromDynamic(pristineData, new ContextShared(source, true));
 		refInstance.shared.parentPrefab = this;
-	}
-
-	/**
-		Returns true if this reference has a cycle,
-		meaning that references depends on each other
-	**/
-	public function hasCycle() : Bool {
-
-		function rec(prefab: Prefab, seenPaths: Map<String, Bool>) : Bool {
-			if (prefab == null)
-				return false;
-
-			var ref = Std.downcast(prefab, Reference);
-			if (ref != null && ref.source != null && ref.shouldBeInstanciated() && !ref.editorOnly) {
-				if (seenPaths.get(ref.source) == true) {
-					return true;
-				}
-
-				seenPaths.set(ref.source, true);
-				if (rec(ref.resolve(), seenPaths.copy()))
-					return true;
-			}
-			for (child in prefab.children) {
-				if(rec(child, seenPaths.copy()))
-					return true;
-			}
-
-			return false;
-		}
-
-		return rec(this, [this.shared.currentPath => true]);
-	}
-
-	override function makeInteractive() {
-		if( editMode != None )
-			return null;
-		return super.makeInteractive();
 	}
 
 	override function edit( ctx : hide.prefab.EditContext ) {

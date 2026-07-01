@@ -1,5 +1,7 @@
 package hrt.prefab;
 
+@:prefabIcon(HuiRes.ui.icons.prefab.model)
+@:prefabHideInAddMenu
 class Model extends Object3D {
 
 	@:s public var animation : Null<String>;
@@ -53,15 +55,25 @@ class Model extends Object3D {
 			#end
 			if( retargetAnim ) applyRetarget(obj);
 
-			obj.name = name;
 			parent3d.addChild(obj);
 
 			if( animation != null ) {
-				obj.playAnimation(shared.loadAnimation(animation));
-				if (randomStart) {
+				var a = shared.loadAnimation(animation);
+				if( a == null )
+					throw('Missing animation file $animation');
+				obj.playAnimation(a);
+				if (randomStart)
 					obj.currentAnimation.setFrame(hxd.Math.random(obj.currentAnimation.frameCount));
+			}
+
+			if (obj.currentAnimation != null) {
+				for (o in obj.currentAnimation.getObjects()) {
+					if (o?.targetObject == obj)
+						o.objectName = name;
 				}
 			}
+
+			obj.name = name;
 
 			return obj;
 		#if editor
@@ -99,6 +111,23 @@ class Model extends Object3D {
 					j.retargetAnim = true;
 			}
 		}
+	}
+
+	override function edit2(ctx: hrt.prefab.EditContext2) {
+		super.edit2(ctx);
+
+		var anims : Array<hide.kit.Select.SelectEntry> = [
+			for (anim in ctx.listModelAnimations(source)) {value: anim, label: ctx.animName(anim)}
+		];
+
+		var txt = "For model -> prefab conversion and Change all, switch back to the old inspector. These feature will be reworked in hide hl";
+		ctx.build(
+			<category("Animation")>
+				<text(txt)/>
+				<file label="Model" type={"model"} field={source} onValueChange={(_) -> {animation = null; ctx.rebuildPrefab(this); ctx.rebuildInspector();}}/>
+				<select(anims) field={animation} onValueChange={(_) -> ctx.rebuildPrefab(this);} disabled={anims.length == 0}/>
+			</category>
+		);
 	}
 
 	#if editor
@@ -290,6 +319,14 @@ class Model extends Object3D {
 		};
 	}
 	#end
+
+	override function editorAllowChild(cl) {
+		return Prefab.isOfType(cl,Object3D) ||
+				Prefab.isOfType(cl,Material) ||
+				Prefab.isOfType(cl,MaterialSelector) ||
+				Prefab.isOfType(cl,Shader) ||
+				Prefab.isOfType(cl, hrt.prefab.fx.AnimEvent);
+	}
 
 	static var _ = Prefab.register("model", Model);
 

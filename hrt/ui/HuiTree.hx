@@ -3,6 +3,19 @@ import hrt.ui.HuiTreeLine;
 
 #if hui
 
+enum DropFlag {
+	Reorder;
+	Reparent;
+}
+
+typedef DropFlags = haxe.EnumFlags<DropFlag>;
+
+enum DropOperation {
+	Before;
+	After;
+	Inside;
+}
+
 enum RefreshFlag {
 	Refresh;
 	RegenerateFlatten;
@@ -26,12 +39,14 @@ typedef TreeItemData = {
 	parent: TreeItemData,
 	children: Array<TreeItemData>,
 	name: String,
-	icon: String,
+	icon: hxd.res.Image,
 	depth: Int,
 	filterState: FilterFlags,
 	identifier: String,
 	?searchRanges: hide.Search.SearchRanges,
 }
+
+typedef SelectionRange = {start: Int, length: Int};
 
 class HuiTree<TreeItem> extends HuiElement {
 	static var SRC =
@@ -49,8 +64,11 @@ class HuiTree<TreeItem> extends HuiElement {
 	var flatList: Array<TreeItemData> = [];
 	var keyboardFocus: TreeItemData = null;
 
+	/**TreeItem -> Bool map**/
 	var selectedElements: Map<{}, Bool> = [];
 	var lastSelectedElement: TreeItemData = null;
+
+	var renamedElement: {item: TreeItem, callback: (String) -> Void, selectionRange: SelectionRange};
 
 	/**TreeItem -> TreeItemData map**/
 	var itemMap : Map<{}, TreeItemData> = [];
@@ -58,6 +76,7 @@ class HuiTree<TreeItem> extends HuiElement {
 	/**Identifier to item open state (item if considered closed if no entry exist in the map)**/
 	var openState: Map<String, Bool> = [];
 
+	var afterRefreshCallbacks: Array<Void -> Void> = [];
 
 	var refreshFlags : RefreshFlags = RefreshFlags.ofInt(0);
 
@@ -77,7 +96,7 @@ class HuiTree<TreeItem> extends HuiElement {
 		});
 
 		searchBar.onKeyDown = keyDownHandler.bind(true);
-		searchBar.onChange = () -> {
+		searchBar.onChange = (tmp) -> {
 			keyboardFocus = null;
 			requestRefresh(RegenerateFlatten);
 		}
@@ -88,16 +107,26 @@ class HuiTree<TreeItem> extends HuiElement {
 		onKeyDown = keyDownHandler.bind(false);
 
 		onPush = (e:hxd.Event) -> {
-			if (e.button == 0) {
-				interactive.focus();
+			if (e.button == 0 || e.button == 1) {
+				//interactive.focus();
 				e.propagate = false;
 
 				if (!hxd.Key.isDown(hxd.Key.CTRL)) {
 					selectedElements.clear();
 					userSelectionChanged();
 				}
+
+				if (e.button == 1) {
+					onItemContextMenu(null);
+				}
 			}
 		}
+	}
+
+	override function onFocusLostInternal(e:hxd.Event) {
+		super.onFocusLostInternal(e);
+		keyboardFocus = null;
+		refreshInternal();
 	}
 
 	function closeSearch() {
@@ -129,7 +158,7 @@ class HuiTree<TreeItem> extends HuiElement {
 		} else if (e.keyCode == hxd.Key.RIGHT) {
 			if (keyboardFocus != null) {
 				if (!isOpen(keyboardFocus)) {
-					toggleItemOpen(keyboardFocus, true);
+					toggleItemDataOpen(keyboardFocus, true);
 				} else if (keyboardFocus.children?.length > 0) {
 					focusSetInternal(keyboardFocus.children[0]);
 				}
@@ -143,7 +172,7 @@ class HuiTree<TreeItem> extends HuiElement {
 						focusSetInternal(keyboardFocus.parent);
 					}
 				} else {
-					toggleItemOpen(keyboardFocus, false);
+					toggleItemDataOpen(keyboardFocus, false);
 				}
 				searchBar.textInput.preventDefault = true;
 				e.propagate = false;
@@ -151,7 +180,12 @@ class HuiTree<TreeItem> extends HuiElement {
 		}
 	}
 
-
+	public function getLastFocusItem() : TreeItem {
+		if (selectedElements.get(lastSelectedElement) != null) {
+			return lastSelectedElement.item;
+		}
+		return null;
+	}
 	public function openSearch() {
 		searchBarContainer.visible = true;
 		@:privateAccess searchBar.textInput.focus();
@@ -163,7 +197,8 @@ class HuiTree<TreeItem> extends HuiElement {
 	public function rebuild(item: TreeItem = null) {
 		if (item != null) {
 			var data = itemMap.get(cast item);
-			updateData(data);
+			if(data != null)
+				updateData(data);
 			requestRefresh(RegenerateFlatten);
 			return;
 		} else {
@@ -201,6 +236,19 @@ class HuiTree<TreeItem> extends HuiElement {
 	}
 
 	/**
+		Return true if the rename operation was started, false if not
+	**/
+	public function rename(item: TreeItem, callback: (newName: String) -> Void, ?selectionRange: SelectionRange) {
+		renamedElement = {
+			item: item,
+			callback: callback,
+			selectionRange: selectionRange,
+		};
+		revealItem(cast item);
+		requestRefresh();
+	}
+
+	/**
 		Called for each of your items in the tree. for the root elements, get called with null as a parameter
 	**/
 	public dynamic function getItemChildren(item: TreeItem) : Array<TreeItem> {return null;}
@@ -234,12 +282,68 @@ class HuiTree<TreeItem> extends HuiElement {
 		return rec(data);
 	}
 
+	/**
+		Called for each of your items in the tree. Allow custom style on tree elements
+	**/
+	public dynamic function applyTreeStyle(item: TreeItem, element : HuiTreeLine) {
+	}
+
+	public function toggleItemOpen(item: TreeItem, ?force: Bool) {
+		var data = itemMap.get(cast item);
+		if (data == null)
+			return;
+		toggleItemDataOpen(data, force);
+	}
+
+	/** Open all of item parents so that item becomes visible in the tree **/
+	public function revealItem(item: TreeItem) : Void {
+		if (refreshFlags.toInt() != 0) {
+			afterRefreshCallbacks.push(revealItem.bind(item));
+			return;
+		}
+
+		function rec(data: TreeItemData) {
+			if (data == null)
+				return;
+			toggleItemDataOpen(data, true);
+			rec(data.parent);
+		}
+
+		rec(itemMap.get(cast item)?.parent);
+	}
+
+	public function revealAll() : Void {
+		if (refreshFlags.toInt() != 0) {
+			afterRefreshCallbacks.push(revealAll);
+			return;
+		}
+
+		for (data in itemMap) {
+			toggleItemDataOpen(data, true);
+		}
+	}
+
+	public function closeAll() : Void {
+		if (refreshFlags.toInt() != 0) {
+			afterRefreshCallbacks.push(revealAll);
+			return;
+		}
+
+		for (data in itemMap) {
+			toggleItemDataOpen(data, false);
+		}
+	}
+
 	public dynamic function getItemName(item: TreeItem) : String {
 		return "";
 	}
 
-	public dynamic function getItemIcon(item: TreeItem) : String {
-		return HuiRes.icons.file_blank;
+	public dynamic function getItemIcon(item: TreeItem) : hxd.res.Image {
+		return HuiRes.ui.icons.file_blank;
+	}
+
+	public dynamic function onItemContextMenu(item: TreeItem) : Void {
+
 	}
 
 	public dynamic function onItemDoubleClick(e: hxd.Event, item: TreeItem) : Void {
@@ -265,22 +369,25 @@ class HuiTree<TreeItem> extends HuiElement {
 	public function setSelection(selection: Array<TreeItem>) : Void {
 		selectedElements.clear();
 		for (item in selection) {
-			var data = itemMap.get(cast item);
-			if (data == null) {
-				selectedElements.set(cast item, true);
-			}
+			selectedElements.set(cast item, true);
+			revealItem(cast item);
 		}
 		requestRefresh();
 	}
 
 	public function getSelectedItems() : Array<TreeItem> {
-		return [for (item => _ in selectedElements) (cast item:TreeItemData).item];
+		return [for (item => _ in selectedElements) cast item];
 	}
 
 	override function sync(ctx:h2d.RenderContext) {
 		super.sync(ctx);
 
-		if (refreshFlags.toInt() != 0) {
+		refreshInternal();
+	}
+
+	function refreshInternal() {
+		var iterCount = 0;
+		while (refreshFlags.toInt() != 0 && iterCount < 2) {
 			if (refreshFlags.has(RootData)) {
 				rootData = generateChildren(null);
 				refreshFlags.set(RegenerateFlatten);
@@ -294,14 +401,31 @@ class HuiTree<TreeItem> extends HuiElement {
 			list.refresh();
 
 			refreshFlags = RefreshFlags.ofInt(0);
+
+			var callbacks = afterRefreshCallbacks.copy();
+			afterRefreshCallbacks = [];
+			for (callback in callbacks) {
+				callback();
+			}
+			iterCount++;
 		}
+		if (refreshFlags.toInt() != 0) {
+			throw "afterRefreshCallback loop detected !";
+		}
+	}
+
+	function refreshSync() {
+		refreshFlags.set(RootData);
+		refreshInternal();
+		list.refresh();
+		@:privateAccess list.refreshInternal();
 	}
 
 	function generateItem(data: TreeItemData) : HuiElement {
 		var line = new HuiTreeLine(data, this);
 
 		line.onCaretClick = () -> {
-			toggleItemOpen(data);
+			toggleItemDataOpen(data);
 		}
 
 		line.onItemSelect = (shift, ctrl) -> {
@@ -317,14 +441,45 @@ class HuiTree<TreeItem> extends HuiElement {
 
 				if (min >= 0) {
 					for (i in min...max+1) {
-						selectedElements.set(cast flatList[i], true);
+						selectedElements.set(cast flatList[i].item, true);
 					}
 				}
 			} else {
-				selectedElements.set(cast data, true);
+				selectedElements.set(cast data.item, true);
 				lastSelectedElement = data;
 			}
 			userSelectionChanged();
+		}
+
+		line.onContextMenu = () -> {
+			onItemContextMenu(data.item);
+		}
+
+		if (dragAndDropInterface != null) {
+			line.onDragStart = () -> {
+				dragAndDropInterface.onDragStart(data.item);
+			}
+
+			line.onDrop = (op: HuiDragOp) -> {
+				dragAndDropInterface.onDrop(data.item, line.getDropOperation(op), op);
+			}
+
+
+			line.onDragOver = line.onDragMove = (op) -> {
+				var dropOp = line.getDropOperation(op);
+
+				op.acceptDrop = dropOp != null;
+
+				line.dom.toggleClass("drop-before", dropOp==Before);
+				line.dom.toggleClass("drop-inside", dropOp==Inside);
+				line.dom.toggleClass("drop-after", dropOp==After);
+			}
+
+			line.onDragOut = (e) -> {
+				line.dom.removeClass("drop-before");
+				line.dom.removeClass("drop-inside");
+				line.dom.removeClass("drop-after");
+			}
 		}
 
 		line.onDoubleClick = (e) -> {
@@ -333,7 +488,7 @@ class HuiTree<TreeItem> extends HuiElement {
 		return line;
 	}
 
-	function toggleItemOpen(data: TreeItemData, ?force : Bool) : Void {
+	function toggleItemDataOpen(data: TreeItemData, ?force : Bool) : Void {
 		if (!hasChildren(cast data.item))
 			return;
 		var currentState = isOpen(data);
@@ -348,11 +503,19 @@ class HuiTree<TreeItem> extends HuiElement {
 			openState.remove(data.identifier);
 		}
 		refreshFlags.set(RegenerateFlatten);
-
 	}
 
 	function refreshItem(item: TreeItemData, element: HuiTreeLine) : Void {
 		element?.refresh();
+		applyTreeStyle(item.item, element);
+	}
+
+	function forceRefreshTree() {
+		for (data in itemMap) {
+			data.children = null;
+		}
+		rootData = generateChildren(null);
+		requestRefresh();
 	}
 
 	function generateChildren(parent: TreeItemData) : Array<TreeItemData> {
@@ -375,7 +538,11 @@ class HuiTree<TreeItem> extends HuiElement {
 				});
 
 				childData.parent = parent;
-				childData.depth = parent?.depth + 1 ?? 0;
+				if (parent != null) {
+					childData.depth = parent.depth + 1;
+				} else {
+					childData.depth = 0;
+				}
 				updateData(childData);
 				childrenData.push(childData);
 			}
@@ -386,6 +553,31 @@ class HuiTree<TreeItem> extends HuiElement {
 		}
 		return childrenData;
 	}
+
+	/**
+		Drag and drop interface.
+		Set this struct with all of it's function callback to handle drag and drop inside your tree.
+	**/
+	public var dragAndDropInterface :
+	{
+		/**
+			Called when the user starts a drag and drop operation on `item`.
+			Call startDrag with your data to initiate the drag
+		**/
+		onDragStart: (item: TreeItem) -> Void,
+
+		/**
+			Called when the user hovers on `target` with a drag and drop operation. You need to return what drop operation is allowed
+			on the given object
+		**/
+		getItemDropFlags: (target: TreeItem, op : HuiDragOp) -> DropFlags,
+
+		/**
+			Called when the user drops an item on `target` and getItemDropFlags returned at least one valid flag.
+			`where` tells you where the item was dropped
+		**/
+		onDrop: (target: TreeItem, where: DropOperation, op : HuiDragOp) -> Void
+	} = null;
 
 	function updateData(data: TreeItemData) {
 		data.children = null; // invalidate children if we are regenerating the tree
@@ -444,23 +636,33 @@ class HuiTree<TreeItem> extends HuiElement {
 			for (item in items) {
 				if (searchBarContainer.visible && !item.filterState.has(Visible)) continue;
 				flatList.push(item);
-				if (isOpen(item)) {
-					if (item.children == null) {
-						generateChildren(item);
-					}
-					rec(item.children);
+				if (item.children == null) {
+					generateChildren(item);
 				}
+				if (isOpen(item))
+					rec(item.children);
 			}
 		}
 		rec(rootData);
 	}
 
-	public function isOpen(data: TreeItemData) : Bool {
-		return (openState.get(data.identifier) ?? false) || data.filterState.has(Open);
+	function isOpen(data: TreeItemData) : Bool {
+		return data.children?.length > 0 && ((openState.get(data.identifier) ?? false) || data.filterState.has(Open));
 	}
 
-	public function isSelected(data: TreeItemData) : Bool {
-		return selectedElements.get(cast data) == true;
+	function isSelected(data: TreeItemData) : Bool {
+		return selectedElements.get(cast data.item) == true;
+	}
+
+	public function isItemSelected(data: TreeItem) : Bool {
+		return isSelected(itemMap.get(cast data));
+	}
+
+	public function isItemOpen(data: TreeItem) : Bool {
+		var data = itemMap.get(cast data);
+		if (data == null)
+			return false;
+		return isOpen(data);
 	}
 }
 

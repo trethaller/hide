@@ -79,6 +79,9 @@ class NodeGenContext {
 	public var previewDomain: ShaderGraph.Domain = null;
 	public var graph: ShaderGraph.Graph = null;
 
+	/**If true, generate human readable names for variables in the shader cache (exists to support backward shader generation when var names where not explicit)**/
+	public var explicitVarNames: Bool = false;
+
 	public function new(graph: ShaderGraph.Graph, domain: ShaderGraph.Domain) {
 		this.domain = domain;
 		this.graph = graph;
@@ -138,17 +141,41 @@ class NodeGenContext {
 		return variable.variable;
 	}
 
+	/**
+		Add a default value init for the variable in case it doesn't exist
+	**/
+	public function ensureVarInit(tvar: TVar) {
+		var fullName = AstTools.getFullName(tvar);
+		var def = globalVars.get(fullName);
+		if (def == null) {
+			throw "var not created";
+		}
+		if (def.__init__ != null)
+			return;
+		def.__init__ = makeAssign(makeVar(def.v), convertToType(def.v.type, makeFloat(0)));
+	}
+
 	function getOrAllocateFromTVar(tvar: TVar) : TVar {
 		var fullName = AstTools.getFullName(tvar);
-
-		// special case handling for normal because it gets replaced in the preview shader
-		if (fullName == "input.normal")
-			return getOrAllocateGlobal(Normal);
 
 		var def = globalVars.get(fullName);
 		if (def != null) {
 			return def.v;
 		}
+
+		// special case handling for normal because it gets replaced in the preview shader
+		if (fullName == "input.normal")
+			return getOrAllocateGlobal(Normal);
+
+		if (fullName == "input.uv2")
+			return getOrAllocateGlobal(UV2);
+
+		if (fullName == "input.uv3")
+			return getOrAllocateGlobal(UV3);
+
+		if (fullName == "input.uv4")
+			return getOrAllocateGlobal(UV4);
+
 
 		var type = tvar.type;
 		switch (type) {
@@ -173,10 +200,14 @@ class NodeGenContext {
 
 	function getOrAllocateGlobal(id: Variables.Global) : TVar {
 		// Remap id for certains variables
-		switch (id) {
-			case Normal if (previewDomain == domain):
-				id = FakeNormal;
-			default:
+		if (previewDomain == domain) {
+			switch (id) {
+				case Normal:
+					id = FakeNormal;
+				case UV2, UV3, UV4:
+					id = UV;
+				default:
+			}
 		}
 
 		var global = Variables.Globals[id];
@@ -300,6 +331,23 @@ class NodeGenContext {
 	}
 
 	public function addExpr(e: TExpr) {
+
+		if (explicitVarNames == true) {
+			// Patch variable names to be unique in the scope
+			function rec(e: TExpr) {
+				trace(e.e.getName());
+				switch(e.e) {
+					case TVarDecl(v, init):
+						var shortName = std.Type.getClassName(std.Type.getClass(node)).split(".").pop();
+						shortName = shortName.substr(0,1).toLowerCase() + shortName.substr(1);
+						v.name = '${shortName}_${node.id}_${v.name}';
+					default:
+				}
+				return e.map(rec);
+			};
+			e = rec(e);
+		}
+
 		expressions.push(e);
 	}
 

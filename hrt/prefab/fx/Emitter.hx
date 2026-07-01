@@ -230,7 +230,7 @@ class ParticleInstance {
 	#end
 
 	var colorMult : Int;
-	var idx : hxd.impl.UInt16;
+	var idx : Int;
 	var startFrame : hxd.impl.UInt16;
 	var life : Single;
 	var lifeTime : Single;
@@ -238,7 +238,7 @@ class ParticleInstance {
 	var distToCam : Single;
 	var startTime : Single;
 
-	inline static var REMOVED_IDX : hxd.impl.UInt16 = -1;
+	inline static var REMOVED_IDX : Int = -1;
 
 	function new() { }
 
@@ -270,20 +270,22 @@ class ParticleInstance {
 		subEmitters = p.subEmitters;
 	}
 
-	function clear(transferSubemitters: EmitterObject = null) {
+	function clear(emitter: EmitterObject = null) {
 		if (subEmitters != null) {
 			for (sub in subEmitters) {
-				if (transferSubemitters != null)
-				{
-					transferSubemitters.subEmitters = transferSubemitters.subEmitters ?? [];
-					transferSubemitters.subEmitters.push(sub);
+				if( emitter != null ) {
+					emitter.subEmitters = emitter.subEmitters ?? [];
+					emitter.subEmitters.push(sub);
 					sub.enable = false;
-				}
-				else {
+				} else {
 					sub.remove();
 				}
 			}
 			subEmitters = null;
+		}
+		if( trail != null && emitter != null && emitter.trails != null ) {
+			@:privateAccess emitter.trails.disposeTrail(trail);
+			trail = null;
 		}
 		idx = REMOVED_IDX;
 	}
@@ -605,7 +607,8 @@ class EmitterObject extends h3d.scene.Object {
 	public var parentEmitter : EmitterObject = null;
 	public var enable : Bool;
 
-	public var startTime = 0.0;
+	public var scene : h3d.scene.Scene;
+
 	public var catchupSpeed = 4; // Use larger ticks when catching-up to save calculations
 	public var totalBurstCount : Int = 0; // Keep track of burst count
 	#if !editor
@@ -722,11 +725,24 @@ class EmitterObject extends h3d.scene.Object {
 		#end
 	}
 
-	function makeShaderInstance(prefab: hrt.prefab.Shader) {
-		var shader = prefab.makeShader();
-		if( shader == null )
-			return;
-		prefab.updateInstance();
+	function getParentFX() : hrt.prefab.fx.FX.FXAnimation {
+		var p = parent;
+		while (p != null) {
+			var anim = Std.downcast(p, hrt.prefab.fx.FX.FXAnimation);
+			if( anim != null ) return anim;
+			p = p.parent;
+		}
+		return null;
+	}
+
+	override function onAdd() {
+		super.onAdd();
+		scene = getScene();
+	}
+
+	override function onParentChanged() {
+		super.onParentChanged();
+		scene = getScene();
 	}
 
 	function init(prefab: Emitter) {
@@ -815,7 +831,7 @@ class EmitterObject extends h3d.scene.Object {
 				}
 				if (this.emitterPrefab == p) {
 					if( !checkEnabled(shader) ) continue;
-					makeShaderInstance(shader);
+					shader.makeShader();
 					hrt.prefab.fx.BaseFX.BaseFXTools.getCustomAnimations(shader, customAnims, batch);
 				}
 
@@ -827,7 +843,7 @@ class EmitterObject extends h3d.scene.Object {
 				var tex = hxd.res.Loader.currentInstance.load(spriteSheet).toTexture();
 				animatedTextureShader = new h3d.shader.AnimatedTexture(tex, frameDivisionX, frameDivisionY, frameCount, frameCount * animationSpeed / lifeTime);
 				animatedTextureShader.useSourceUVs = animationUseSourceUVs;
-				animatedTextureShader.startTime = startTime;
+				animatedTextureShader.startTime = @:privateAccess scene?.renderer.ctx.globalTime ?? 0.0;
 				animatedTextureShader.loop = animationLoop;
 				animatedTextureShader.blendBetweenFrames = animationBlendBetweenFrames;
 				animatedTextureShader.setPriority(1);
@@ -847,7 +863,7 @@ class EmitterObject extends h3d.scene.Object {
 		// Dispose previous particles
 		if(particles != null) {
 			for(i in 0...particlesCount) {
-				particles[i].clear();
+				particles[i].clear(this);
 			}
 		}
 
@@ -855,16 +871,9 @@ class EmitterObject extends h3d.scene.Object {
 		particlesCount = maxCount;
 		evaluator = new EmitterEvaluator(this, instDef);
 
-		{
-			var p = parent;
-			while (p != null && Std.downcast(p, hrt.prefab.fx.FX.FXAnimation) == null) {
-				p = p.parent;
-			}
-			if (p != null) {
-				var fx : hrt.prefab.fx.FX.FXAnimation = cast p;
-			@:privateAccess evaluator.parameters = fx.evaluator.parameters;
-			}
-		}
+		var anim = getParentFX();
+		if(anim != null)
+			evaluator.parameters = @:privateAccess anim.evaluator.parameters;
 
 		reset();
 	}
@@ -885,12 +894,14 @@ class EmitterObject extends h3d.scene.Object {
 		}
 
 		for (i in 0...numInstances) {
-			particles[i].clear();
+			particles[i].clear(this);
 		}
 
 		#if editor
 		debugGraphics.remove();
 		#end
+
+		scene = null;
 		super.onRemove();
 	}
 
@@ -911,7 +922,7 @@ class EmitterObject extends h3d.scene.Object {
 
 		if(particles != null) {
 			for(i in 0...particlesCount) {
-				particles[i].clear();
+				particles[i].clear(this);
 			}
 		}
 
@@ -926,20 +937,29 @@ class EmitterObject extends h3d.scene.Object {
 		}
 	}
 
-	function error() {
+	function error(?kind : String) {
 		var path = name;
 		var obj : h3d.scene.Object = this.parent;
 		while (obj != null) {
-			if(obj.name != null && obj.name.length > 0) {
-				path = obj.name + "/" + path;
-			}
+			var name = (obj.name != null && obj.name.length > 0) ? obj.name : Type.getClassName(Type.getClass(obj));
+			path = name + "/" + path;
 			obj = obj.parent;
 		}
-		throw 'Emitter error ($path)'; // TODO: Add more information
+		trace('curTime: $curTime, numInstances: $numInstances, emitCount: $emitCount');
+		var fx = getParentFX();
+		if(fx != null)
+			trace("parent fx: " + fx.prefab.name);
+		throw (kind != null ? kind : "emitter error") + ' ($path)';
 	}
 
+	#if emitter_check_list
+	public var enableListCheck = false;
 	inline function checkList() {
-		#if 0
+		if(enableListCheck)
+			doCheckList();
+	}
+
+	function doCheckList() {
 		var p = listHead;
 		var tail = null;
 		var count = 0;
@@ -965,11 +985,13 @@ class EmitterObject extends h3d.scene.Object {
 			p = p.prev;
 		}
 		if(count != numInstances) error();
-		#end
 	}
+	#else
+	inline function checkList() { }
+	#end
 
 	function allocInstance() {
-		if(numInstances >= maxCount) error();
+		if(numInstances >= maxCount) error("allocInstance");
 		var p = particles[numInstances++];
 		p.init(instanceCounter, this);
 		p.prev = null;
@@ -984,14 +1006,14 @@ class EmitterObject extends h3d.scene.Object {
 
 	function disposeInstance(idx: Int) {
 		checkList();
+		if(numInstances <= 0)
+			error("dispose");
 		--numInstances;
-		if(numInstances < 0)
-			error();
 
 		// stitch list after remove
 		var o = particles[idx];
 
-		if(o.idx == ParticleInstance.REMOVED_IDX) error();
+		if(o.idx == ParticleInstance.REMOVED_IDX) error("double dispose");
 
 		// Transfer remaining subemitter to this emitter array
 		o.clear(this);
@@ -1015,6 +1037,7 @@ class EmitterObject extends h3d.scene.Object {
 		// remove swap
 		if(idx < numInstances) {
 			var swap = particles[numInstances];
+			if(swap.idx == ParticleInstance.REMOVED_IDX) error();
 			o.load(swap);
 			swap.idx = ParticleInstance.REMOVED_IDX;
 			swap.subEmitters = null;
@@ -1049,19 +1072,20 @@ class EmitterObject extends h3d.scene.Object {
 		if( instDef == null)
 			return;
 
+		@:privateAccess var globalTime = scene?.renderer.ctx.globalTime ?? curTime;
+
 		var emitterQuat : h3d.Quat = null;
 		if (count > 0) {
-			var scene = relativeScenePosition ? getScene() : null;
 
 			if (trailsTemplate != null && trails == null) {
-				var made = trailsTemplate.make(this);
-				trails = cast made.local3d;
+				trails = trailsTemplate.create(this, maxCount);
+				trailsTemplate.local3d = trails;
 				trails.autoTrackPosition = false;
 			}
 
 			for( i in 0...count ) {
 				var part = allocInstance();
-				part.startTime = startTime + curTime;
+				part.startTime = globalTime;
 				part.lifeTime = hxd.Math.max(0.01, lifeTime + random.srand(lifeTimeRand));
 
 				if(useRandomColor) {
@@ -1184,7 +1208,7 @@ class EmitterObject extends h3d.scene.Object {
 							continue;
 						}
 
-						var subEmitterInstance : Emitter = @:privateAccess template.make(this.getScene());
+						var subEmitterInstance : Emitter = @:privateAccess template.make(scene);
 						var emitter : EmitterObject = cast subEmitterInstance.local3d;
 						emitter.isSubEmitter = true;
 						emitter.parentEmitter = this;
@@ -1365,7 +1389,10 @@ class EmitterObject extends h3d.scene.Object {
 
 	function updateAlignment() {
 		if(alignMode == Screen) {
-			tmpMat.load(getScene().camera.mcam);
+			var cam = scene?.camera;
+			if (cam == null)
+				return;
+			tmpMat.load(cam.mcam);
 			tmpMat.invert();
 
 			if(simulationSpace == Local) {  // Compensate parent rotation
@@ -1380,6 +1407,9 @@ class EmitterObject extends h3d.scene.Object {
 			screenRot.multiply(screenRot, tmpMat);
 		}
 		else if(alignMode == Axis) {
+			var cam = scene?.camera;
+			if (cam == null)
+				return;
 			var lockAxis = new h3d.Vector();
 			var rightAxis = new h3d.Vector();
 			var upAxis = new h3d.Vector();
@@ -1402,7 +1432,7 @@ class EmitterObject extends h3d.scene.Object {
 					upAxis.set(-1, 0, 0);
 			}
 			var lookAtPos = tmpVec;
-			lookAtPos.load(getScene().camera.pos);
+			lookAtPos.load(cam.pos);
 
 			if ( followRotation ) {
 				var invAbsPos = getInvPos();
@@ -1492,7 +1522,6 @@ class EmitterObject extends h3d.scene.Object {
 	}
 
 	function updateParticles(full: Bool, dt: Float) {
-		var scene = getScene();
 		if (scene == null)
 			return;
 
@@ -1511,13 +1540,9 @@ class EmitterObject extends h3d.scene.Object {
 			parentTransform.scale(1.0/scale.x, 1.0/scale.y, 1.0/scale.z);
 		}
 
-		var prev : ParticleInstance = null;
 		var camPos = scene.camera.pos;
 
-		if (trails != null) {
-			trails.numTrails = maxCount;
-		}
-
+		checkList();
 		// evaluator.prefetch();
 
 		var i = 0;
@@ -1525,7 +1550,12 @@ class EmitterObject extends h3d.scene.Object {
 			var p = particles[i];
 			evaluator.setInstance(p.idx);  // TOMR: is this stable during the entire particle lifetime ?
 			if(p.life > p.lifeTime) {
-				if (p.trail == null || p.trail.generation != p.trailGeneration) {
+				if (trails != null && p.trail != null && p.trail.numPoints > 0) {
+					// trail still fading out, keep particle slot alive until all points expire
+					var pos = p.absPos.getPosition();
+					trails.updateTrail(p.trail, dt, pos.x, pos.y, pos.z);
+					++i;
+				} else {
 					// SUB EMITTER
 					if( subEmitterTemplates != null ) {
 						for (template in subEmitterTemplates) {
@@ -1545,9 +1575,6 @@ class EmitterObject extends h3d.scene.Object {
 						}
 					}
 					i = disposeInstance(i);
-				} else {
-					prev = p;
-					++i;
 				}
 			}
 			else {
@@ -1560,18 +1587,15 @@ class EmitterObject extends h3d.scene.Object {
 						p.distToCam = camPos.distanceSq(p.absPos.getPosition());
 				}
 				p.life += dt;  // After updateAbsPos(), which uses current life
-				prev = p;
 				++i;
 
 				if (trails != null) {
-					trails.updateTrail(p.trail, dt, p.absPos._41, p.absPos._42, p.absPos._43);
-					if ( @:privateAccess trails.cooldown < 0 ) {
-						@:privateAccess trails.cooldown = 1 / trails.prefab.framerate;
-						trails.addPoint(p.trail, p.absPos._41, p.absPos._42, p.absPos._43);
-					}
+					var pos = p.absPos.getPosition();
+					trails.updateTrail(p.trail, dt, pos.x, pos.y, pos.z);
 				}
 			}
 		}
+		checkList();
 	}
 
 	public function hasActiveParts() : Bool {
@@ -1701,15 +1725,19 @@ class EmitterObject extends h3d.scene.Object {
 	}
 }
 
+@:prefabName("Emitter")
+@:prefabIcon(hrt.ui.HuiRes.ui.icons.prefab.emitter)
 class Emitter extends Object3D {
 
 	public function new(parent, shared: ContextShared) {
 		super(parent, shared);
+		#if editor  // in game, all emitters are going to be loaded anyway
 		props = { };
 		for(param in emitterParams) {
 			if(param.def != null)
 				EmitterHelper.resetParam(props, param);
 		}
+		#end
 	}
 
 	public static var emitterParams : Array<hrt.prefab.fx.EmitterHelper.ParamDef> = [
@@ -1831,8 +1859,8 @@ class Emitter extends Object3D {
 
 	override function load( obj : Dynamic ) {
 		super.load(obj);
-		for(param in emitterParams) {
-			if(Reflect.hasField(obj.props, param.name)) {
+		for (param in emitterParams) {
+			if (Reflect.hasField(obj.props, param.name)) {
 				var val : Dynamic = Reflect.field(obj.props, param.name);
 				switch(param.t) {
 					case PEnum(en):
@@ -1847,9 +1875,16 @@ class Emitter extends Object3D {
 						#end
 					default:
 				}
-				Reflect.setField(props, param.name, val);
+				// Negative warmup time is an old verison of delay
+				if (param.name == "warmUpTime" && val < 0) {
+					Reflect.setField(props, "delay", hxd.Math.abs(val));
+					Reflect.deleteField(props, "warmUpTime");
+				}
+				else {
+					Reflect.setField(props, param.name, val);
+				}
 			}
-			else if(param.def != null)
+			else if (param.def != null)
 				EmitterHelper.resetParam(props, param);
 			else if (param.name == "randomGradient")
 				(props:Dynamic).randomGradient = Gradient.getDefaultGradientData();
@@ -1858,19 +1893,6 @@ class Emitter extends Object3D {
 
 	override function copy(obj:Prefab) {
 		super.copy(obj);
-		for(param in emitterParams) {
-			if(Reflect.hasField(obj.props, param.name)) {
-				var val : Dynamic = Reflect.field(obj.props, param.name);
-				/*switch(param.t) {
-					case PEnum(en):
-						val = Type.createEnum(en, val);
-					default:
-				}*/
-				Reflect.setField(props, param.name, val);
-			}
-			else if(param.def != null)
-				EmitterHelper.resetParam(props, param);
-		}
 	}
 
 	override function getPreloadFiles():Array<String> {
@@ -1991,12 +2013,6 @@ class Emitter extends Object3D {
 		// DEBUG
 		#if editor
 		emitterObj.debugGraphics.visible = EmitterHelper.getParamVal(PARAMS, props, "viewDebug");
-		#end
-
-		#if !editor  // Keep startTime at 0 in Editor, since global.time is synchronized to timeline
-		var scene = local3d.getScene();
-		if(scene != null)
-			emitterObj.startTime = @:privateAccess scene.renderer.ctx.time;
 		#end
 
 		emitterObj.init(this);

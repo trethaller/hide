@@ -1,6 +1,9 @@
 package hrt.prefab;
 import hxd.Math;
 
+@:prefabName("Object 3D")
+@:prefabIcon(hrt.ui.HuiRes.ui.icons.prefab.object3d)
+@:prefabCategory("3D")
 class Object3D extends Prefab {
 
 	public var local3d : h3d.scene.Object = null;
@@ -105,6 +108,28 @@ class Object3D extends Prefab {
 		return { x : x, y : y, z : z, scaleX : scaleX, scaleY : scaleY, scaleZ : scaleZ, rotationX : rotationX, rotationY : rotationY, rotationZ : rotationZ };
 	}
 
+	static function roundSmall(f: Float) {
+		var num = 10_000.0;
+		var r = hxd.Math.round(f * num) / num;
+		// Avoid rounding floats that are too big
+		return hxd.Math.abs(r-f) < 2.0 / num ? r : f;
+	}
+
+	public static function makeTransform(mat: h3d.Matrix) {
+		var rot = mat.getEulerAngles();
+		var x = roundSmall(mat.tx);
+		var y = roundSmall(mat.ty);
+		var z = roundSmall(mat.tz);
+		var s = mat.getScale();
+		var scaleX = roundSmall(s.x);
+		var scaleY = roundSmall(s.y);
+		var scaleZ = roundSmall(s.z);
+		var rotationX = roundSmall(hxd.Math.radToDeg(rot.x));
+		var rotationY = roundSmall(hxd.Math.radToDeg(rot.y));
+		var rotationZ = roundSmall(hxd.Math.radToDeg(rot.z));
+		return { x : x, y : y, z : z, scaleX : scaleX, scaleY : scaleY, scaleZ : scaleZ, rotationX : rotationX, rotationY : rotationY, rotationZ : rotationZ };
+	}
+
 	public function applyTransform() {
 		var o = local3d;
 		if (o == null) return;
@@ -180,6 +205,17 @@ class Object3D extends Prefab {
 	}
 
 	public function getAbsPos( followRefs : Bool = false ) {
+		return getRelativeTransform(null, followRefs);
+	}
+
+	static var tmpRelTransformMat = new h3d.Matrix();
+	/**
+		Return the relative transform between this and to prefab. To must be a parent of this object. Pass null to the the AbsPos of the object
+	**/
+	public function getRelativeTransform(to: hrt.prefab.Prefab, ?matrix: h3d.Matrix, followRefs : Bool = false) {
+		if (matrix == null)
+			matrix = new h3d.Matrix();
+
 		inline function getParent( p : Prefab ) {
 			var parent = p.parent;
 			if( parent == null && followRefs )
@@ -187,18 +223,20 @@ class Object3D extends Prefab {
 			return parent;
 		}
 		var p = getParent(this);
-		while( p != null ) {
+		while( p != null && p != to ) {
 			var obj = p.to(Object3D);
 			if( obj == null ) {
 				p = getParent(p);
 				continue;
 			}
-			var m = getTransform();
-			var abs = obj.getAbsPos(followRefs);
-			m.multiply3x4(m, abs);
-			return m;
+			var abs = obj.getRelativeTransform(to, matrix, followRefs);
+			var m = getTransform(tmpRelTransformMat);
+			matrix.multiply3x4(m, abs);
+			return matrix;
 		}
-		return getTransform();
+		if (p == null && to != null)
+			throw "to is not a parent of this prefab";
+		return getTransform(matrix);
 	}
 
 	/**
@@ -264,6 +302,103 @@ class Object3D extends Prefab {
 				<checkbox field={visible}/>
 			</category>, this
 		);
+	}
+
+	override function makeInteractive() : hxd.SceneEvents.Interactive {
+		if(local3d == null)
+			return null;
+
+		var meshes = getObjects(h3d.scene.Mesh);
+		var ref = Std.downcast(this, Reference);
+		if (ref != null) {
+			meshes = [];
+			function rec(p : Prefab) {
+				var o = Std.downcast(p, Object3D);
+				if (!p.locked) {
+					if (o != null)
+						meshes = meshes.concat(o.getObjects(h3d.scene.Mesh));
+
+					for (c in p.children)
+						rec(c);
+				}
+			}
+
+			if ( ref.refInstance != null )
+				rec(ref.refInstance);
+		}
+
+		var mesh = Std.downcast(local3d, h3d.scene.Mesh);
+		if (mesh != null ) {
+			meshes.push(mesh);
+		}// ctx.shared.getObjects(this, h3d.scene.Mesh);
+		var invRootMat = local3d.getAbsPos().clone();
+		invRootMat.invert();
+		var bounds = new h3d.col.Bounds();
+		var localBounds = [];
+		var totalSeparateBounds = 0.;
+		var visibleMeshes = [];
+		var hasSkin = false;
+
+		inline function getVolume(b:h3d.col.Bounds) {
+			var c = b.getSize();
+			return c.x * c.y * c.z;
+		}
+		for(mesh in meshes) {
+			if(mesh.ignoreCollide)
+				continue;
+
+			// invisible objects are ignored collision wise
+			var p : h3d.scene.Object = mesh;
+			while( p != null && p != local3d ) {
+				if( !p.visible ) break;
+				p = p.parent;
+			}
+			if( p != local3d ) continue;
+
+			var localMat = mesh.getAbsPos().clone();
+			localMat.multiply(localMat, invRootMat);
+
+			if( mesh.primitive == null ) continue;
+			visibleMeshes.push(mesh);
+
+			if( Std.downcast(mesh, h3d.scene.Skin) != null ) {
+				hasSkin = true;
+				continue;
+			}
+
+			var lb = mesh.primitive.getBounds().clone();
+			lb.transform(localMat);
+			bounds.add(lb);
+
+			totalSeparateBounds += getVolume(lb);
+			for( b in localBounds ) {
+				var tmp = new h3d.col.Bounds();
+				tmp.intersection(lb, b);
+				totalSeparateBounds -= getVolume(tmp);
+			}
+			localBounds.push(lb);
+		}
+		if( visibleMeshes.length == 0 )
+			return null;
+		var colliders = [for(m in visibleMeshes) {
+			var c : h3d.col.Collider = try m.getLocalCollider() catch(e: Dynamic) null;
+			if(c != null) c;
+		}];
+		var meshCollider = new h3d.col.ObjectCollider(local3d, colliders.length == 1 ? colliders[0] : new h3d.col.Collider.GroupCollider(colliders));
+		var collider : h3d.col.Collider = new h3d.col.ObjectCollider(local3d, bounds);
+		if( hasSkin ) {
+			collider = meshCollider; // can't trust bounds
+			meshCollider = null;
+		} else {
+			collider = new h3d.col.Collider.OptimizedCollider(collider, meshCollider);
+			meshCollider = null;
+		}
+		var int = new h3d.scene.Interactive(collider, local3d);
+		int.ignoreParentTransform = true;
+		int.preciseShape = meshCollider;
+		int.propagateEvents = true;
+		int.enableRightButton = true;
+		return int;
 	}
 
 #if editor
@@ -414,103 +549,6 @@ class Object3D extends Prefab {
 
 		if (editorIcon != null)
 			editorIcon.removeChildren();
-	}
-
-	override function makeInteractive() : hxd.SceneEvents.Interactive {
-		if(local3d == null)
-			return null;
-
-		var meshes = getObjects(h3d.scene.Mesh);
-		var ref = Std.downcast(this, Reference);
-		if (ref != null) {
-			meshes = [];
-			function rec(p : Prefab) {
-				var o = Std.downcast(p, Object3D);
-				if (!p.locked) {
-					if (o != null)
-						meshes = meshes.concat(o.getObjects(h3d.scene.Mesh));
-
-					for (c in p.children)
-						rec(c);
-				}
-			}
-
-			if ( ref.refInstance != null )
-				rec(ref.refInstance);
-		}
-
-		var mesh = Std.downcast(local3d, h3d.scene.Mesh);
-		if (mesh != null ) {
-			meshes.push(mesh);
-		}// ctx.shared.getObjects(this, h3d.scene.Mesh);
-		var invRootMat = local3d.getAbsPos().clone();
-		invRootMat.invert();
-		var bounds = new h3d.col.Bounds();
-		var localBounds = [];
-		var totalSeparateBounds = 0.;
-		var visibleMeshes = [];
-		var hasSkin = false;
-
-		inline function getVolume(b:h3d.col.Bounds) {
-			var c = b.getSize();
-			return c.x * c.y * c.z;
-		}
-		for(mesh in meshes) {
-			if(mesh.ignoreCollide)
-				continue;
-
-			// invisible objects are ignored collision wise
-			var p : h3d.scene.Object = mesh;
-			while( p != null && p != local3d ) {
-				if( !p.visible ) break;
-				p = p.parent;
-			}
-			if( p != local3d ) continue;
-
-			var localMat = mesh.getAbsPos().clone();
-			localMat.multiply(localMat, invRootMat);
-
-			if( mesh.primitive == null ) continue;
-			visibleMeshes.push(mesh);
-
-			if( Std.downcast(mesh, h3d.scene.Skin) != null ) {
-				hasSkin = true;
-				continue;
-			}
-
-			var lb = mesh.primitive.getBounds().clone();
-			lb.transform(localMat);
-			bounds.add(lb);
-
-			totalSeparateBounds += getVolume(lb);
-			for( b in localBounds ) {
-				var tmp = new h3d.col.Bounds();
-				tmp.intersection(lb, b);
-				totalSeparateBounds -= getVolume(tmp);
-			}
-			localBounds.push(lb);
-		}
-		if( visibleMeshes.length == 0 )
-			return null;
-		var colliders = [for(m in visibleMeshes) {
-			var c : h3d.col.Collider = try m.getGlobalCollider() catch(e: Dynamic) null;
-			if(c != null) c;
-		}];
-		var meshCollider = colliders.length == 1 ? colliders[0] : new h3d.col.Collider.GroupCollider(colliders);
-		var collider : h3d.col.Collider = new h3d.col.ObjectCollider(local3d, bounds);
-		if( hasSkin ) {
-			collider = meshCollider; // can't trust bounds
-			meshCollider = null;
-		} else {
-			collider = new h3d.col.Collider.OptimizedCollider(collider, meshCollider);
-			meshCollider = null;
-		}
-		var int = new h3d.scene.Interactive(collider, local3d);
-		int.ignoreParentTransform = true;
-		int.preciseShape = meshCollider;
-		int.propagateEvents = true;
-		int.enableRightButton = true;
-		return int;
 	}
 
 	override function edit( ctx : hide.prefab.EditContext ) {

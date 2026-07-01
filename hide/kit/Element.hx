@@ -45,6 +45,13 @@ package hide.kit;
 		Callbacks bound in the onChange function should be bound on the relevant widget onValueChange instead
 	**/
 
+typedef ChangeParams = {
+	var callback: () -> Void;
+	var isTemporaryEdit: Bool;
+	var recordUndo: Bool;
+}
+
+
 @:keepSub
 class Element {
 	#if !macro
@@ -177,6 +184,15 @@ class Element {
 				return found;
 		}
 		return null;
+	}
+
+	/**
+		Refresh the values of all the widgets that are bound to a field to the actual field value
+	**/
+	public function refreshFields() : Void {
+		for (c in children) {
+			c.refreshFields();
+		}
 	}
 
 	// Overridable API
@@ -375,9 +391,9 @@ class Element {
 		#end
 	}
 
-	function change(callback: () -> Void, isTemporary: Bool) {
+	function change(params: ChangeParams) {
 		if (parent != null) {
-			parent.change(callback, isTemporary);
+			parent.change(params);
 		}
 	}
 
@@ -611,7 +627,7 @@ class Element {
 				@:privateAccess slider.showRange = min != null && max != null;
 				slider;
 			case PBool:
-				new hide.kit.Slider(this, def.name);
+				new hide.kit.Checkbox(this, def.name);
 			case PTexturePath:
 				var file = new hide.kit.File(this, def.name);
 				file.type = "texture";

@@ -4,6 +4,7 @@ hui-file-picker {
 	fill-width: true;
 	cursor: button;
 	padding: 0 3 0 3;
+	overflow: hidden;
 
 	> hui-text {
 		valign: middle;
@@ -20,6 +21,12 @@ hui-file-picker {
 	&:hover {
 		> hui-background {
 			background: @color-over;
+		}
+	}
+
+	&.unset {
+		> hui-text {
+			halign: middle;
 		}
 	}
 }

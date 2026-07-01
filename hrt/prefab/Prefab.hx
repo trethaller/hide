@@ -21,6 +21,10 @@ typedef PrefabInfo = {
 	#if editor
 	var inf : hide.prefab.HideProps;
 	#end
+	#if editor_hl
+	// note : initialized by hide_hl.Ide.setProject
+	var ?editorProps : hrt.prefab.editor.Props;
+	#end
 };
 
 @:access(Prefab)
@@ -47,6 +51,9 @@ enum TreeChangedResult {
 @:keepSub
 @:autoBuild(hrt.prefab.Macros.buildPrefab())
 @:build(hrt.prefab.Macros.buildPrefab())
+@:prefabName("Prefab")
+@:prefabIcon(hrt.ui.HuiRes.ui.icons.question_mark)
+@:prefabHideInAddMenu
 class Prefab {
 
 	/**
@@ -585,7 +592,23 @@ class Prefab {
 		return Reflect.field(props, "$cdbtype");
 	}
 
-	public final function toString() : String{
+	#if castle
+	public static function makeCdbProps( e : hrt.prefab.Prefab, prefabFilePath: String, type : cdb.Sheet ) {
+		var props = type.getDefaults();
+		Reflect.setField(props, "$cdbtype", hide.comp.cdb.DataFiles.getTypeName(type));
+		if( type.idCol != null && !type.idCol.opt ) {
+			if (prefabFilePath != null) {
+				var id = new haxe.io.Path(prefabFilePath).file;
+				id = id.charAt(0).toUpperCase() + id.substr(1);
+				id += "_"+e.name;
+				Reflect.setField(props, type.idCol.name, id);
+			}
+		}
+		return props;
+	}
+	#end
+
+	public function toString() : String{
 		var str = type;
 		if ( name != "" ) str += '($name)';
 		return str;
@@ -649,19 +672,34 @@ class Prefab {
 	public function edit2(ctx: hrt.prefab.EditContext2) : Void {
 	}
 
+	/**
+		Create an interactive object to the scene objects of this prefab
+	**/
+	public function makeInteractive() : hxd.SceneEvents.Interactive {
+		return null;
+	}
+
+	/**
+		Return true if an instance of this class prefab can be created as a child of the cl class prefab
+	**/
+	public function editorAllowParent(cl: Class<Prefab>) : Bool {
+		return true;
+	}
+
+	/**
+		Return true if an instance of cl can be created as a child of this prefab
+	**/
+	public function editorAllowChild(cl: Class<Prefab>) : Bool {
+		return true;
+	}
+
+
 	#if editor
 	/**
 		Allows to customize how the prefab object is displayed / handled within Hide
 	**/
 	public function getHideProps() : Null<hide.prefab.HideProps> {
 		return { icon : "question-circle", name : Type.getClassName(Type.getClass(this)), hideInAddMenu: true };
-	}
-
-	/**
-		Create an interactive object to the scene objects of this prefab
-	**/
-	public function makeInteractive() : hxd.SceneEvents.Interactive {
-		return null;
 	}
 
 	/**
@@ -808,7 +846,7 @@ class Prefab {
 	function shouldBeInstanciated() : Bool {
 		if (!enabled) return false;
 
-		#if editor
+		#if (editor || editor_hl)
 		if (inGameOnly)
 			return false;
 		#else

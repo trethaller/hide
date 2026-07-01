@@ -1,0 +1,77 @@
+hui-toolbar {
+	fill-width: true;
+	padding: 2;
+
+	background-type: hui;
+	>hui-background {
+		background: @color-gray-3;
+		outline: 1 @popup-border;
+	}
+
+	hui-toggle {
+		padding: 5;
+		min-width: 26;
+		min-height: 26;
+	}
+
+	hui-button {
+		padding: 5;
+		min-width: 26;
+		min-height: 26;
+	}
+
+	>hui-element {
+		margin-right: 5px;
+	}
+
+	.tiny {
+		padding-right: 0;
+		padding-left: 0;
+		min-width: 1px;
+		width: 1px;
+		hui-icon {
+			min-width: 10px;
+			width: 10px;
+		}
+	}
+
+	.group-start {
+		margin-right: 0px;
+		> hui-background {
+			border-radius: @base-corner-radius 0 0 @base-corner-radius;
+			outline: 1 @widget-border;
+		}
+	}
+
+	.group {
+		margin-left: -1px;
+		margin-right: 0px;
+		> hui-background {
+			border-radius: 0;
+			outline: 1 @widget-border;
+		}
+	}
+
+	.group-end {
+		margin-left: -1px;
+		margin-right: 5px;
+		> hui-background {
+			border-radius: 0 @base-corner-radius @base-corner-radius 0;
+			outline: 1 @widget-border;
+		}
+	}
+}
+
+.title {
+		halign: middle;
+		color: darken(@text-color, 20%);
+		margin-top: 2;
+		margin-bottom: 10;
+	}
+
+.sub-title {
+	halign: left;
+	color: darken(@text-color, 10%);
+	margin-top: 2;
+	margin-bottom: 5;
+}

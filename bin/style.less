@@ -4542,6 +4542,7 @@ div.gradient-box {
 
 			div {
 				overflow-x: hidden;
+				overflow-y: hidden;
 				height:100%;
 			}
 
@@ -4589,6 +4590,10 @@ div.gradient-box {
 				text-align: center;
 				margin-top: 2px;
 			}
+		}
+
+		.precent {
+			font-variant-numeric: tabular-nums;
 		}
 	}
 
@@ -4788,6 +4793,7 @@ hide-popover {
 	--offset-y: 0;
 	background-color: #222222;
 	border-radius: 5px;
+
 	box-shadow: 0 1px 6px 1px rgba(0, 0, 0, 0.75);
 
 	border: solid 1px #444444;
@@ -4816,6 +4822,7 @@ hide-popover {
 	menu {
 		max-height: min(500px, 90vh);
 		overflow-y: auto;
+		overflow-x: auto;
 
 		&::-webkit-scrollbar {
 			width: 4px;
@@ -6631,6 +6638,59 @@ fancy-tooltip {
 							font-style: normal;
 							background-color: #FFFFFF20;
 						}
+					}
+				}
+			}
+		}
+	}
+}
+
+.cdb-favorites {
+	overflow-x: hidden;
+	>.header {
+		text-wrap: nowrap;
+		overflow: hidden;
+		border-left: 5px solid;
+		display: flex;
+		flex-direction: column;
+		margin: 10px 10px 10px 20px;
+		padding-left: 5px;
+		font-size: 1.1em;
+
+		.title {
+			font-weight: 600;
+		}
+	}
+
+	.content {
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		margin-left: 26px;
+
+		.result {
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
+			text-wrap: nowrap;
+			padding: 3px 0 3px 0;
+
+			.entry {
+				overflow: hidden;
+				cursor: pointer;
+
+				a {
+					width: 100%;
+					padding: 3px;
+
+					font-weight: 400;
+					font-style: normal;
+					background-color: #404248;
+					border-radius: 10px;
+					padding: 2px 8px 2px 8px;
+					cursor: pointer;
+					&:hover {
+						color: rgb(200, 200, 255);
 					}
 				}
 			}

@@ -18,11 +18,18 @@ class HuiMainLayout extends HuiElement {
 				</hui-button-menu>
 
 				<hui-button-menu(() -> [
+						{label: "Profiler", click: () -> hide.Ide.inst.app.toggleProfiler(), checked: hide.tools.Profiler.processing, keys: "F9", stayOpen: true},
+						{label: "FPS Graph", click: () -> hide.Ide.inst.app.toggleFPSGraph(), checked: @:privateAccess hide.Ide.inst.app.fpsGraph != null, keys: "F10", stayOpen: true},
+						{isSeparator: true},
 						{label: "Toast", menu: [
 							{label: "Info", click:() -> addToast("Debug toast", Info), stayOpen: true},
 							{label: "Warning", click:() -> addToast("Debug toast", Warning), stayOpen: true},
 							{label: "Error", click:() -> addToast("Debug toast", Error), stayOpen: true}
 						]},
+						{
+							label: "Prefab Editor Tests",
+							click: ()->hide.Ide.inst.openView(@:privateAccess new hrt.ui.tests.HuiPrefabEditorTests({})),
+						}
 					])>
 					<hui-text("Debug")/>
 				</hui-button-menu>
@@ -76,7 +83,7 @@ class HuiMainLayout extends HuiElement {
 	override function sync(ctx) : Void {
 		super.sync(ctx);
 
-		var frameTime = hxd.Timer.elapsedTime;
+		var frameTime = hide.Ide.inst.app.lastUpdateTime;
 		var time = haxe.Timer.stamp();
 		if (frameTime > maxFrameTime || time - lastmaxFrameTimeTime > 1.0) {
 			maxFrameTime = frameTime;

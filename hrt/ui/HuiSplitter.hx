@@ -5,6 +5,7 @@ package hrt.ui;
 class HuiSplitter extends HuiElement {
 	static var SRC =
 		<hui-splitter>
+			<hui-element id="line"/>
 		</hui-splitter>
 
 	var direction(get, never): h2d.Flow.FlowLayout;
@@ -23,7 +24,11 @@ class HuiSplitter extends HuiElement {
 	}
 
 	function over(e: hxd.Event) {
-		interactive.cursor = switch(direction) {
+		interactive.cursor = getCursor();
+	}
+
+	function getCursor() : hxd.Cursor {
+		return switch(direction) {
 			case Horizontal:
 				ResizeWE;
 			case Vertical:
@@ -45,6 +50,7 @@ class HuiSplitter extends HuiElement {
 			}
 			getScene().startCapture((e: hxd.Event) -> {
 				if (!hxd.Key.isDown(hxd.Key.MOUSE_LEFT)) {
+					uiBase.cursorOverride = null;
 					getScene().stopCapture();
 				} else {
 					switch(direction) {
@@ -57,6 +63,7 @@ class HuiSplitter extends HuiElement {
 					}
 				}
 			});
+			uiBase.cursorOverride = getCursor();
 		}
 	}
 

@@ -11,8 +11,17 @@ class Ide extends hide.tools.IdeData {
 
 	// Keep a small delay between saves to avoid spamming the disk with writes
 	var localStorageSaveDelay: Float = 0.0;
+	public var isSVNAvailable(default, null): Bool;
+
+	/**
+		Application local clipboard. For copy / pastes of data that doesn't make sense outside of hide
+		as we don't have access to advanced clipboard capabilities like MIME
+	**/
+	var localClipboard: Dynamic = null;
 
 	static final localUserDataSave = "hidehl.json";
+
+	var updates : Array<(dt: Float) -> Void> = [];
 
 	public override function new() {
 		super();
@@ -22,10 +31,28 @@ class Ide extends hide.tools.IdeData {
 		initConfig(cwd);
 
 		loadLocalStorage();
+
+		isSVNAvailable = Sys.command("svn",["--version"]) == 0 &&
+			Sys.command("where.exe", ["TortoiseProc.exe"]) == 0 &&
+			Sys.command("svn", ["info", getPath(projectDir)]) == 0;
 	}
 
 	var localStorage: Dynamic = {};
 	var localStorageSaveQueued: Bool = false;
+
+	public function setClipboard(text: String, data: Dynamic) {
+		hxd.System.setClipboardText(text);
+		localClipboard = data;
+	}
+
+	public function getClipboardText() : String {
+		return hxd.System.getClipboardText();
+	}
+
+	public function getClipboardData() : Dynamic {
+		return localClipboard;
+	}
+
 
 	public function saveLocalStorage(key: String, data: Dynamic) {
 		Reflect.setField(localStorage, key, data);
@@ -44,7 +71,7 @@ class Ide extends hide.tools.IdeData {
 	}
 
 	function saveLocalStorageToDisk() {
-		sys.io.File.saveContent(appPath + "/" + localUserDataSave, haxe.Json.stringify(localStorage, "\t"));
+		sys.io.File.saveContent(appPath + "/" + localUserDataSave, toJSON(localStorage));
 	}
 
 	public function update(dt: Float) {
@@ -54,6 +81,25 @@ class Ide extends hide.tools.IdeData {
 				saveLocalStorageToDisk();
 				localStorageSaveDelay = 5.0;
 				localStorageSaveQueued = false;
+			}
+		}
+
+		for (update in updates) {
+			update(dt);
+		}
+	}
+
+	public function addUpdate(cb: (dt: Float) -> Void) {
+		if (!updates.contains(cb)) {
+			updates.push(cb);
+		}
+	}
+
+	public function removeUpdate(cb: (dt: Float) -> Void) {
+		for (i => update in updates) {
+			if (Reflect.compareMethods(update, cb)) {
+				updates.splice(i, 1);
+				return;
 			}
 		}
 	}
@@ -86,6 +132,13 @@ class Ide extends hide.tools.IdeData {
 
 	override function setProject(dir:String) {
 		super.setProject(dir);
+
+		if (@:bypassAccessor hrt.tools.FileManager.inst == null) {
+			var inst = hrt.tools.FileManager.inst;
+		} else {
+			@:privateAccess hrt.tools.FileManager.inst.init();
+		}
+
 		trace("set project " + dir);
 		hxd.res.Loader.currentInstance?.dispose();
 		hxd.res.Loader.currentInstance = new hxd.res.Loader(new hxd.fs.LocalFileSystem(resourceDir, null));
@@ -108,6 +161,11 @@ class Ide extends hide.tools.IdeData {
 
 		h3d.mat.MaterialSetup.current = new h3d.mat.PbrMaterialSetup();
 
+		// init prefab editor metadata
+		for (prefab in hrt.prefab.Prefab.registry) {
+			var cl = Type.createEmptyInstance(prefab.prefabClass);
+			prefab.editorProps = cl.getEditorProps();
+		}
 	}
 
 	public function getLocalStorage(key: String) : Null<Dynamic> {
@@ -120,14 +178,62 @@ class Ide extends hide.tools.IdeData {
 		queueStorageSave();
 	}
 
-	public function openFile(filePath: String) {
+
+	/**
+		Blocks until the user confirms they want to perform an operation, and returns true if the user want to proceed.
+		Prefer using BaseUI.confirm, as it uses a more integrated UI and has more parameters, but requires an async callback.
+	**/
+	public function confirm(message: String) : Bool {
+		var log = new hl.UI.WinLog("Proceed ?", 300,200);
+		log.setTextContent(message);
+
+		var cancel = false;
+
+		var cancelButton = new hl.UI.Button(log, "Cancel");
+		cancelButton.onClick = function() {
+			cancel = true;
+			hl.UI.stopLoop();
+		}
+
+		var yesButton = new hl.UI.Button(log, "Yes");
+		yesButton.onClick = function() {
+			hl.UI.stopLoop();
+		}
+
+		while( hl.UI.loop(true) != Quit )
+			Sys.sleep(0.0);
+		log.destroy();
+		/*var f = new haxe.EnumFlags<hl.UI.DialogFlags>();
+		f.set(YesNo);
+		if(hl.UI.dialog("Unsaved changes", "Save changes before quit?", f))
+			save();*/
+
+		return !cancel;
+	}
+
+	public function openFile(filePath: String, ?callback : (v : hrt.ui.HuiView<Dynamic>) -> Void) {
+		if (filePath == null)
+			return;
+		if (!haxe.io.Path.isAbsolute(filePath))
+			filePath = getPath(filePath);
 		var path = new haxe.io.Path(filePath);
 
 		try {
-			switch (path.ext) {
+			var v = switch (path.ext) {
 				case "prefab", "fx":
-					openView(new hide.view.Prefab({path: filePath}), Main);
-			}
+					new hide.view.Prefab({path: filePath});
+				case "fbx":
+					new hide.view.Model({path: filePath});
+				case "png", "jpg", "envd", "envs":
+					new hide.view.Texture({path: filePath});
+				case _:
+					hide.tools.IdeData.openExternalFile(filePath);
+					return;
+			};
+
+			openView(v, Main);
+			if (callback != null)
+				callback(v);
 		} catch (e) {
 			showError('Could not open file ${getRelPath(filePath)} :<br/>$e');
 		}
@@ -155,19 +261,79 @@ class Ide extends hide.tools.IdeData {
 		return null;
 	}
 
+	public function listAnims( path : String, customFilter : (f:String) -> Bool = null ) {
+		var path = path ?? "";
+		var isDir = sys.FileSystem.isDirectory(getPath(path));
+
+		var config = hide.Config.loadForFile(this, path);
+
+		var dirs : Array<String> = config.get("hmd.animPaths");
+		if( dirs == null ) dirs = [];
+		dirs = [for( d in dirs ) haxe.io.Path.join([resourceDir, d])];
+
+
+		var parts = path.split("/");
+		var anims = [];
+
+		if (!isDir) {
+			parts.pop();
+			dirs.unshift(getPath(parts.join("/")));
+
+			var lib = hxd.res.Loader.currentInstance.load(path).toModel().toHmd();
+			if (lib == null)
+				return [];
+			if( lib.header.animations.length > 0 )
+				anims.push(path);
+		} else {
+			dirs.unshift(haxe.io.Path.join([resourceDir, path]));
+		}
+
+		function loadAnims( path : String, rec : Bool ) {
+			for( f in try sys.FileSystem.readDirectory(path) catch( e : Dynamic ) [] ) {
+				var file = f.toLowerCase();
+				var filePath = path+"/"+f;
+				if( h3d.anim.Animation.isAnimation(f) && (StringTools.endsWith(file,".hmd") || StringTools.endsWith(file,".fbx")) )
+					anims.push(makeRelative(filePath));
+				if (customFilter != null && customFilter(f))
+					anims.push(makeRelative(filePath));
+				if( rec && sys.FileSystem.isDirectory(getPath(filePath)) )
+					loadAnims(filePath, rec);
+			}
+		}
+
+		for( dir in dirs ) {
+			var dir = dir;
+			var recursive = StringTools.endsWith(dir, "*");
+			if( recursive ) dir = dir.substr(0,-1);
+			if( StringTools.endsWith(dir, "/") ) dir = dir.substr(0,-1);
+			loadAnims(dir, recursive);
+		}
+		return anims;
+	}
+
 
 	static public function showError(message: String) {
 		Sys.stdout().writeString('[Err ] $message\n');
+		Sys.stdout().flush();
 		inst.app.ui.uiBase.mainLayout.addToast(message, Error);
 	}
 
 	static public function showWarning(message: String) {
 		Sys.stdout().writeString('[Warn] $message\n');
+		Sys.stdout().flush();
 		inst.app.ui.uiBase.mainLayout.addToast(message, Warning);
 	}
 
 	static public function showInfo(message: String) {
 		Sys.stdout().writeString('[Info] $message\n');
+		Sys.stdout().flush();
 		inst.app.ui.uiBase.mainLayout.addToast(message, Info);
+	}
+
+	static inline public function formatError(message: String, e: haxe.Exception, ?lineBreak: String) {
+		var string = 'Error : $message\n$e\n\nStack trace : ${e.stack.toString()}';
+		if (lineBreak != null)
+			string = StringTools.replace(string, "\n", lineBreak);
+		return string;
 	}
 }

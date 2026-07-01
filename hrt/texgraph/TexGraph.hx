@@ -13,7 +13,7 @@ typedef Connection = {
 	from : TexNode,
 	outputId : Int,
 };
-
+@:prefabHideInAddMenu
 class TexGraph extends hrt.prefab.Prefab {
 	public static var CURRENT_NODE_ID = 0;
 
@@ -77,7 +77,11 @@ class TexGraph extends hrt.prefab.Prefab {
 	}
 
 	public function saveToText() : String {
+		#if editor
+		return hide.Ide.inst.toJSON(save());
+		#else
 		return haxe.Json.stringify(save(), "\t");
+		#end
 	}
 
 

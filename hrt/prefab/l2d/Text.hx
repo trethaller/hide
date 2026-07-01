@@ -1,5 +1,6 @@
 package hrt.prefab.l2d;
 
+@:prefabIcon(HuiRes.ui.icons.prefab.text)
 class Text extends Object2D {
 
 	// parameters
@@ -176,8 +177,6 @@ class Text extends Object2D {
 		#end
 	}
 
-	#if editor
-
 	override function makeInteractive():h2d.Interactive {
 		if(local2d == null)
 			return null;
@@ -188,6 +187,8 @@ class Text extends Object2D {
 		int.propagateEvents = true;
 		return int;
 	}
+
+	#if editor
 
 	override function edit( ctx : hide.prefab.EditContext ) {
 		super.edit(ctx);

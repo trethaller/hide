@@ -1,5 +1,6 @@
 package hrt.prefab.l2d;
 
+@:prefabIcon(HuiRes.ui.icons.prefab.gradient)
 class Gradient extends Object2D {
     @:s var gradient: hrt.impl.Gradient.GradientData = hrt.impl.Gradient.getDefaultGradientData();
     @:s var dx: Float;
@@ -47,8 +48,6 @@ class Gradient extends Object2D {
 		);
 	}
 
-    #if editor
-
 	override function makeInteractive():h2d.Interactive {
 		if(local2d == null)
 			return null;
@@ -61,6 +60,7 @@ class Gradient extends Object2D {
 		return int;
 	}
 
+	#if editor
 
     override function edit( ctx : hide.prefab.EditContext ) {
 		super.edit(ctx);

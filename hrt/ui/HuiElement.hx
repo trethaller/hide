@@ -19,6 +19,7 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	@:p(bgType) var backgroundType(default, set) : String;
 	@:p var saveDisplayKey(default, set): String;
 	@:p public var displayName: String;
+	@:p public var styleEvents: Bool = true;
 
 	public var onOut(default, set) : hxd.Event->Void = emptyFuncEventVoid;
 	public var onOver(default, set) : hxd.Event->Void = emptyFuncEventVoid;
@@ -33,6 +34,17 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	public var onFocusLost(default, set) : hxd.Event->Void = emptyFuncEventVoid;
 	public var onWheel(default, set) : hxd.Event->Void = emptyFuncEventVoid;
 	public var onDoubleClick(default, set) : hxd.Event->Void = null;
+
+	public var onDragStart(default, set) : Void -> Void = emtpyFuncVoidVoid;
+	public var onDragEnd(default, set) : HuiDragOp -> Void = emptyFuncDragVoid; /** Called when the element started a drag opetaion and the operation ended (either cancelled or succesfull) **/
+	public var onDragOver(default, set) : HuiDragOp -> Void = emptyFuncDragVoid; /** Called when someone starts to drag an item above this one**/
+	public var onDragOut(default, set) : HuiDragOp -> Void = emptyFuncDragVoid; /** Called when someone leave this item **/
+	public var onDragMove(default, set) : HuiDragOp -> Void = emptyFuncDragVoid; /** Called when someone is draging an item above this object and moves **/
+	public var onDrop(default, set) : HuiDragOp -> Void = emptyFuncDragVoid; /** Called when the user drops a dragged operation on THIS element**/
+
+	public var onAnyDragStart : HuiDragOp -> Void = emptyFuncDragVoid; /** Called when any drag and drop operation has started**/
+	public var onAnyDragEnd : HuiDragOp -> Void = emptyFuncDragVoid; /** Called when any drag and drop operation has ended**/
+
 	@:p public var propagateEvents(get, set): Bool;
 
 	public var onChildrenChanged : Void -> Void = emtpyFuncVoidVoid;
@@ -93,6 +105,13 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	function set_onWheel(v) {onWheel = v; makeInteractive(); return v;};
 	function set_onDoubleClick(v) {onDoubleClick = v; makeInteractive(); return v;};
 
+	function set_onDragStart(v) {onDragStart = v; makeInteractive(); return v;};
+	function set_onDragEnd(v) {onDragEnd = v; makeInteractive(); return v;};
+	function set_onDragOver(v) {onDragOver = v; makeInteractive(); return v;};
+	function set_onDragOut(v) {onDragOut = v; makeInteractive(); return v;};
+	function set_onDragMove(v) {onDragMove = v; makeInteractive(); return v;};
+	function set_onDrop(v) {onDrop = v; makeInteractive(); return v;};
+
 	function get_propagateEvents() {return interactive?.propagateEvents;}
 	function set_propagateEvents(v) {makeInteractive(); return interactive.propagateEvents = v;};
 
@@ -131,7 +150,61 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 		initComponent();
 	}
 
+	public function findParent<T:HuiElement>(?cl: Class<T>, ?filter: T -> Bool) : T {
+		var current = this;
+		while(current != null) {
+			var toClass : T = cl != null ? Std.downcast(current, cl) : cast current;
+			if (toClass != null) {
+				if (filter == null || filter(toClass))
+					return toClass;
+			}
+			current = current.parentElement;
+		}
+		return null;
+	}
+
+	/** Call a function on every HuiElement in this element tree**/
+	public function rec(fn: (e: HuiElement) -> Void) {
+		fn(this);
+		for (child in this.children) {
+			if (child == background)
+				continue;
+			var e = Std.downcast(child, HuiElement);
+			if (e != null) {
+				e.rec(fn);
+			}
+		}
+	}
+
+	public function getView() {
+		return findParent(HuiView);
+	}
+
+	function execCommand(command: hrt.ui.HuiCommands.HuiCommand) {
+		uiBase.checkCommand2(command, this);
+	}
+
 	function registerCommand(command: hrt.ui.HuiCommands.HuiCommand, context: hrt.ui.HuiCommands.ShortcutContext, cb: Void -> Void) {
+		if (context == View || context == FocusedView) {
+			if (Std.downcast(this, HuiView) == null) {
+				var view = findParent(HuiView);
+
+				if (view == null)
+					throw "Cannot register command with View or FocusedView context if it doesn't have a view parent (you are probably in a popup)";
+
+				if (context == View) {
+					view.registerCommand(command, context, cb);
+					return;
+				} else  {
+					view.registerCommand(command, context, cb);
+					return;
+				}
+			}
+		}
+
+		if (context == View)
+			context = ElementAndChildren;
+
 		makeInteractive();
 		registeredCommands ??= [];
 		unregisterCommand(command);
@@ -153,6 +226,7 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 		if (enableInteractive)
 			return;
 		enableInteractive = true;
+		interactive.cursor = null;
 
 		interactive.name = Type.getClassName(Type.getClass(this));
 
@@ -229,6 +303,12 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 				continue;
 			removeChild(child);
 		}
+		// very cursed
+		for (child in children.copy()) {
+			if (child is HuiText) {
+				removeChild(child);
+			}
+		}
 	}
 
 	function saveDisplayState(key: String, value : Dynamic) : Void {
@@ -256,25 +336,79 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 		return displayName ?? Type.getClassName(Type.getClass(this));
 	}
 
+	function checkDragFn(fn: HuiDragOp -> Void, event: hxd.Event) : Bool{
+		if (fn != emptyFuncDragVoid) {
+			var base = uiBase;
+			if (base.currentDrag != null) {
+				base.currentDrag.event = event;
+				base.currentDrag.acceptDrop = true;
+				fn(base.currentDrag);
+				base.currentDrag.event = null;
+				if (base.currentDrag.acceptDrop)
+					event.propagate = false;
+				return base.currentDrag.acceptDrop;
+			}
+		}
+		return false;
+	}
+
 
 	function onOverInternal(e: hxd.Event) {
 		if (!enable)
 			return;
-		dom.hover = true;
-		e.propagate = true;
+
+		if (checkDragFn(onDragOver, e)) {
+			@:privateAccess uiBase.currentDrag.setLastOver(this);
+			e.propagate = false;
+			return;
+		}
+
+		e.propagate = interactive.propagateEvents;
+
+		if (uiBase.currentDrag != null)
+			return;
+
+		if (styleEvents)
+			dom.hover = true;
+
 		onOver(e);
 	}
 
 	function onOutInternal(e: hxd.Event) {
 		if (!enable)
 			return;
-		dom.hover = false;
-		e.propagate = true;
+
+		if (onDragOut != emptyFuncDragVoid && @:privateAccess uiBase.currentDrag?.lastOver == this && checkDragFn(onDragOut, e)) {
+			@:privateAccess uiBase.currentDrag.setLastOver(null);
+			e.propagate = false;
+			return;
+		}
+
+		if (styleEvents)
+			dom.hover = false;
+		e.propagate = interactive.propagateEvents;
+
+		if (uiBase.currentDrag != null)
+			return;
+
 		onOut(e);
 	}
 
 	function onMoveInternal(e: hxd.Event) {
 		if (!enable)
+			return;
+
+		if (onDragMove != null && @:privateAccess uiBase.currentDrag?.lastOver == this) {
+			if (checkDragFn(onDragMove, e)) {
+				e.propagate = false;
+				return;
+			}
+		}
+
+
+		e.propagate = interactive.propagateEvents;
+
+		if (uiBase.currentDrag != null)
 			return;
 
 		onMove(e);
@@ -283,6 +417,8 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 	function onClickInternal(e: hxd.Event) {
 		if (!enable)
 			return;
+
+		uiBase.focusView(this);
 
 		if (onDoubleClick != null) {
 			var time = haxe.Timer.stamp();
@@ -303,16 +439,48 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 
 		dom.active = true;
 
-		grabCommandFocus();
+		if (onDragStart != emtpyFuncVoidVoid) {
+			var base = uiBase;
+			base.startDragX = e.relX;
+			base.startDragY = e.relY;
+
+			interactive.startCapture(dragTester, () -> {
+				var base = uiBase;
+				base.startDragX = hxd.Math.NaN;
+				base.startDragY = hxd.Math.NaN;
+			});
+		}
 
 		onPush(e);
+	}
+
+	function dragTester(e:hxd.Event) {
+		e.propagate = true;
+		switch (e.kind) {
+			case ERelease, EReleaseOutside:
+				interactive.stopCapture();
+			case EMove:
+				var base = uiBase;
+				var dist = hxd.Math.distance(base.startDragX - e.relX, base.startDragY - e.relY, 0);
+				if (dist > HuiBase.dragDistanceThreshold) {
+					interactive.stopCapture();
+					onDragStart();
+				}
+			default:
+		}
+	}
+
+	function startDrag(type: String, data: Dynamic) : HuiDragOp {
+		return uiBase.startDragOperation(this, type, data);
 	}
 
 	function onReleaseInternal(e: hxd.Event) {
 		if (!enable)
 			return;
 
-		dom.active = false;
+		if (styleEvents)
+			dom.active = false;
+
 		onRelease(e);
 	}
 
@@ -320,7 +488,8 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 		if (!enable)
 			return;
 
-		dom.active = false;
+		if (styleEvents)
+			dom.active = false;
 	}
 
 	function onKeyDownInternal(e: hxd.Event) {
@@ -338,10 +507,6 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 			return;
 
 		onKeyUp(e);
-	}
-
-	function grabCommandFocus() {
-		uiBase.setCommandFocus(this);
 	}
 
 	function onTextInputInternal(e: hxd.Event) {
@@ -378,19 +543,22 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 			uiBase.scrollFocus = null;
 		}
 
-		if( overflow == Scroll && (base.scrollFocus == null || base.scrollFocus == this) ) {
+		if (!uiBase.style.inspectModeActive || !hxd.Key.isDown(hxd.Key.SHIFT)) {
 
-			var maxScroll = Std.int(contentHeight - calculatedHeight);
-			var newPos = hxd.Math.clamp(scrollPosY + e.wheelDelta * scrollWheelSpeed, 0, maxScroll);
+			if( overflow == Scroll && (base.scrollFocus == null || base.scrollFocus == this) ) {
 
-			if (newPos != scrollPosY) {
-				scrollPosY = newPos;
+				var maxScroll = Std.int(contentHeight - calculatedHeight);
+				var newPos = hxd.Math.clamp(scrollPosY + e.wheelDelta * scrollWheelSpeed, 0, maxScroll);
 
-				// only take focus if we actually did scroll
-				uiBase.scrollFocus = this;
-				base.lastScrollTime = now;
+				if (newPos != scrollPosY) {
+					scrollPosY = newPos;
+
+					// only take focus if we actually did scroll
+					uiBase.scrollFocus = this;
+					base.lastScrollTime = now;
+				}
+				e.propagate = uiBase.scrollFocus == null;
 			}
-			e.propagate = uiBase.scrollFocus == null;
 		}
 
 		onWheel(e);
@@ -398,6 +566,7 @@ class HuiElement extends h2d.Flow #if hui implements h2d.domkit.Object #end {
 
 	static function emptyFuncEventVoid(e: hxd.Event) { }
 	static function emtpyFuncVoidVoid() {}
+	static function emptyFuncDragVoid(op: HuiDragOp) {}
 }
 
 #end

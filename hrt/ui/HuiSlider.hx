@@ -12,6 +12,7 @@ class HuiSlider extends HuiElement {
 	@:p public var defaultValue : Float = 0.0;
 	@:p public var min : Null<Float> = null;
 	@:p public var max : Null<Float> = null;
+	@:p public var wrap : Bool = false;
 	@:p public var step : Null<Float> = null;
 	@:p public var decimals : Null<Int> = null;
 
@@ -29,9 +30,11 @@ class HuiSlider extends HuiElement {
 		};
 
 		var moved = false;
-		var startX = 0;
-		var startY = 0;
+		var startX = -1;
+		var startY = -1;
 		this.onPush = (e : hxd.Event) -> {
+			if (inputText.visible)
+				return;
 			startX = hxd.Window.getInstance().mouseX;
 			var accumulator= 0.0;
 			startY = hxd.Window.getInstance().mouseY;
@@ -43,14 +46,21 @@ class HuiSlider extends HuiElement {
 
 				if (hxd.Math.abs(steps) > 0) {
 					if (min != null && max != null) {
-						value += (steps * scale) * (max - min) / 400.0;
+						value += (steps * scale) * (max - min) / 1000.0;
 					} else {
-						value += (steps * scale) * (step ?? 1);
+						value += (steps * scale) * (step ?? 0.01);
 					}
 					accumulator -= steps;
 
-					if (min != null) value = hxd.Math.max(min, value);
-					if (max != null) value = hxd.Math.min(max, value);
+					if (wrap) {
+						if (min != null && max != null) {
+							var size = max - min;
+							value = ((value - min + size) % size) + min;
+						}
+					} else {
+						if (min != null) value = hxd.Math.max(min, value);
+						if (max != null) value = hxd.Math.min(max, value);
+					}
 					moved = true;
 					onValueChanged(true);
 				}
@@ -59,18 +69,24 @@ class HuiSlider extends HuiElement {
 		};
 
 		this.onRelease = (e : hxd.Event) -> {
-			hxd.Window.getInstance().mouseMode = Absolute;
-			hxd.Window.getInstance().setCursorPos(startX, startY);
-			if (!moved) {
-				inputText.visible = true;
-				valueText.visible = false;
-				inputText.text = valueText.text;
-				haxe.Timer.delay(() -> inputText.focus(), 0);
+			if (inputText.visible)
+				return;
+			if (startX >= 0 && startY >= 0) {
+				hxd.Window.getInstance().mouseMode = Absolute;
+				hxd.Window.getInstance().setCursorPos(startX, startY);
+				if (!moved) {
+					inputText.visible = true;
+					valueText.visible = false;
+					inputText.text = valueText.text;
+					haxe.Timer.delay(() -> inputText.focus(), 0);
+				}
+				else {
+					moved = false;
+					onValueChanged(false);
+				}
 			}
-			else {
-				moved = false;
-				onValueChanged(false);
-			}
+			startX = -1;
+			startY = -1;
 		}
 	}
 
@@ -79,7 +95,7 @@ class HuiSlider extends HuiElement {
 	}
 
 	function refreshSlider() {
-		fillBar.minWidth = max == null ? 0 : hxd.Math.round(hxd.Math.clamp(this.innerWidth * (value / max), 0, this.innerWidth));
+		fillBar.minWidth = max == null ? 0 : hxd.Math.round(hxd.Math.clamp(this.innerWidth * ((value - min) / (max - min)), 0, this.innerWidth));
 		valueText.text = '${decimals == null ? value : hxd.Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals)}';
 	}
 

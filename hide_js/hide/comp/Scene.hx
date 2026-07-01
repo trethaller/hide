@@ -378,7 +378,7 @@ class Scene extends hide.comp.Component implements h3d.IDrawable {
 			for( f in try sys.FileSystem.readDirectory(path) catch( e : Dynamic ) [] ) {
 				var file = f.toLowerCase();
 				var filePath = path+"/"+f;
-				if( StringTools.startsWith(f,"Anim_") && (StringTools.endsWith(file,".hmd") || StringTools.endsWith(file,".fbx")) )
+				if( h3d.anim.Animation.isAnimation(f) && (StringTools.endsWith(file,".hmd") || StringTools.endsWith(file,".fbx")) )
 					anims.push(filePath);
 				if (customFilter != null && customFilter(f))
 					anims.push(filePath);
@@ -399,7 +399,7 @@ class Scene extends hide.comp.Component implements h3d.IDrawable {
 
 	public function animationName( path : String ) {
 		var name = path.split("/").pop();
-		if( StringTools.startsWith(name, "Anim_") )
+		if( StringTools.startsWith(name.toLowerCase(), "anim_") )
 			name = name.substr(5);
 		name = name.substr(0, -4);
 		if( StringTools.endsWith(name,"_loop") )
@@ -551,7 +551,7 @@ class Scene extends hide.comp.Component implements h3d.IDrawable {
 				if (sys.FileSystem.exists(ide.getPath(e.entry.path))) {
 					var lib = e.toModel().toHmd();
 					hmdCache.set(key, lib);
-					editor.onResourceChanged(lib);
+					editor?.onResourceChanged(lib);
 				}
 			});
 			cleanup.push(function() {

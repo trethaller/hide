@@ -29,6 +29,36 @@ class HuiTabViewContainer extends HuiTabContainer {
 	override function new(?parent) {
 		super(parent);
 		initComponent();
+
+		onContextMenu = (forElement: HuiElement) -> {
+			var tab = getTabTab(forElement);
+			if (tab == null)
+				return;
+			var tabContent : Array<hrt.ui.HuiMenu.MenuItem> = [];
+
+			tabContent.push({label: "Close", click: requestClose.bind(cast forElement)});
+			tabContent.push({label: "Reload", click: () -> {
+					var view : HuiView<Dynamic> = cast forElement;
+					if (view == null)
+						return;
+					view.requestClose((canClose) -> {
+						var index = getTabs().indexOf(forElement);
+						var state = getViewState(forElement);
+						removeTab(forElement);
+
+						var newView = loadView(state, index);
+						activeTabElement = newView;
+					});
+				}
+			});
+			tabContent.push({isSeparator: true});
+
+			var view = Std.downcast(forElement, HuiView);
+			if (view != null)
+				view.getContextMenuContent(tabContent);
+
+			uiBase.openMenu(tabContent, {}, {object: Element(tab), directionX: StartInside, directionY: EndOutside});
+		}
 	}
 
 	override function syncTabs() {
@@ -38,15 +68,7 @@ class HuiTabViewContainer extends HuiTabContainer {
 			var tabState : Array<ViewData> = [];
 
 			for (child in getTabs()) {
-				var view = Std.downcast(child, HuiView);
-				if (view == null)
-					continue;
-				var state : ViewData = {type: view.getTypeName()};
-				if (Reflect.fields(view.state).length > 0) {
-					state.state = view.state;
-				}
-
-				tabState.push(state);
+				tabState.push(getViewState(child));
 			}
 
 			var state : TabViewData = {
@@ -59,10 +81,38 @@ class HuiTabViewContainer extends HuiTabContainer {
 		}
 	}
 
+	function getViewState(element: HuiElement) : ViewData {
+		var view = Std.downcast(element, HuiView);
+		if (view == null)
+			return null;
+		var state : ViewData = {type: view.getTypeName()};
+		if (Reflect.fields(view.state).length > 0) {
+			state.state = view.state;
+		}
+		return state;
+	}
+
 	override function makeTab(forElement: HuiElement) : HuiTab {
 		var tab = super.makeTab(forElement);
-		tab.onClose = () -> removeTab(forElement);
+		tab.onClose = requestClose.bind(cast forElement);
+		var view = Std.downcast(forElement, HuiView);
+		if (view != null) {
+			view.onHasUnsavedChangesChanged = () -> {
+				syncTabsQueued = true;
+			};
+		}
 		return tab;
+	}
+
+	override function requestClose(forElement: HuiElement) {
+		var forElement = Std.downcast(forElement, HuiView);
+		if (forElement == null)
+			return;
+		forElement.requestClose((canClose:Bool) -> {
+			if (canClose) {
+				removeTab(forElement);
+			}
+		});
 	}
 
 	override function sync(ctx) {
@@ -95,19 +145,24 @@ class HuiTabViewContainer extends HuiTabContainer {
 		activeTabElement = null;
 
 		for (tab in tabList) {
-			var success = false;
-			if (tab.type != null) {
-				var cl = HuiView.get(tab.type);
-				if (cl != null) {
-					var view : HuiView<Dynamic> = Type.createInstance(cl, [tab.state, content]);
-					continue;
-				}
-			}
-			var error = new HuiElement(content);
-			var errorText = new HuiText('Missing HuiView for type ${tab.type}', error);
+			loadView(tab);
 		}
+	}
 
+	function loadView(data: ViewData, ?index: Int) : HuiView<Dynamic> {
+		var success = false;
 		syncTabsQueued = true;
+		if (data.type != null) {
+			var cl = HuiView.get(data.type);
+			if (cl != null) {
+				var view : HuiView<Dynamic> = Type.createInstance(cl, [data.state]);
+				addTab(view, index);
+				return view;
+			}
+		}
+		var error = new HuiElement(content);
+		var errorText = new HuiText('Missing HuiView for type ${data.type}', error);
+		return null;
 	}
 }
 

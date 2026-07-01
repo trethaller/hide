@@ -7,6 +7,8 @@ class HuiCommands {
 	static public var copy = new HuiCommand("Copy", {ctrl: true, key: K.C});
 	static public var paste = new HuiCommand("Paste", {ctrl: true, key: K.V});
 	static public var cut = new HuiCommand("Cut", {ctrl: true, key: K.X});
+	static public var save = new HuiCommand("Save", {ctrl: true, key: K.S});
+	static public var duplicate = new HuiCommand("Duplicate", {ctrl: true, key: K.D});
 
 	static public var delete = new HuiCommand("Delete", {key: K.DELETE});
 	static public var escape = new HuiCommand("Escape", {key: K.ESCAPE});
@@ -15,6 +17,14 @@ class HuiCommands {
 	static public var redo = new HuiCommand("Redo", {ctrl: true, key: K.Y});
 
 	static public var search = new HuiCommand("Search", {ctrl: true, key: K.F});
+
+	static public var rename = new HuiCommand("Rename", {key: K.F2});
+
+	static public var selectAll = new HuiCommand("Select All", {ctrl: true, key: K.A});
+}
+
+class HuiDebugCommands {
+	static public var debugReload = new HuiCommand("Debug Reload", {ctrl: true, shift: true, key: K.R});
 }
 
 /**
@@ -31,14 +41,19 @@ enum ShortcutContext {
 	ElementAndChildren;
 
 	/**
-		The element parent view is focused
+		The first view in this element hierarchy will handle register the command as a ElementAndChildren
 	**/
 	View;
 
 	/**
-		Global shortcut
+		If the event was not handled, process it by the current focused view (bypass things like modal input block)
 	**/
-	Global;
+	FocusedView;
+
+	// /**
+	// 	Global shortcut
+	// **/
+	// Global;
 }
 
 typedef Shortcut = {
@@ -54,7 +69,7 @@ class HuiCommand {
 	public var defaultShortcut: Shortcut;
 	public var registeredShortcut : Shortcut;
 
-	function new(display: String, defaultShortcut: Shortcut) {
+	public function new(display: String, defaultShortcut: Shortcut) {
 		this.display = display;
 		this.defaultShortcut = defaultShortcut;
 		this.registeredShortcut = defaultShortcut;
@@ -71,6 +86,21 @@ class HuiCommand {
 			return true;
 		}
 		return false;
+	}
+
+	static public function shortcutToString(s: Shortcut) : String {
+		var str = "";
+		if (s.ctrl) {
+			str += "Ctrl+";
+		}
+		if (s.alt) {
+			str += "Alt+";
+		}
+		if (s.shift) {
+			str += "Shift+";
+		}
+		str += hxd.Key.getKeyName(s.key);
+		return str;
 	}
 }
 #end

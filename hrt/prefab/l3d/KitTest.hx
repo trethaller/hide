@@ -44,6 +44,8 @@ class KitTestTool2 extends hrt.prefab.editor.Tool {
 
 }
 
+@:prefabHideInAddMenu
+@:prefabIcon(HuiRes.ui.icons.prefab.kit_test)
 class KitTest extends Object3D {
 
 	override function makeObject(parent3d: h3d.scene.Object) : h3d.scene.Object {
@@ -80,6 +82,7 @@ class KitTest extends Object3D {
 	@:s var testEnum: TestEnum;
 	@:s var testAbstractString: TestAbstractString;
 	@:s var testAbstractInt: TestAbstractInt;
+	@:s var testBitflag: Int;
 
 	@:s var ifBlockCondition: TestAbstractInt;
 
@@ -162,6 +165,17 @@ class KitTest extends Object3D {
 				</line>
 
 				<line id="parentLine" multiline>
+				</line>
+
+				<line label="Bitflag">
+					<bitflag(0) field={testBitflag} label=""/>
+					<bitflag(1) field={testBitflag} label=""/>
+					<bitflag(2) field={testBitflag} label=""/>
+					<bitflag(3) field={testBitflag} label=""/>
+					<bitflag(4) field={testBitflag} label=""/>
+					<bitflag(5) field={testBitflag} label=""/>
+					<bitflag(6) field={testBitflag} label=""/>
+					<bitflag(7) field={testBitflag} label=""/>
 				</line>
 
 				<block id="addToMe"></block>
@@ -692,6 +706,65 @@ class KitTest extends Object3D {
 				line.addDecorationLeft(button);
 			}
 		}
+
+
+
+		// This is just to test the the reworked Object3D.getAbsPos api
+
+		function testAbsPos() {
+			var abs = getAbsPos(true);
+			var abs2 = local3d.getAbsPos();
+			var flt = abs.getFloats();
+			var flt2 = abs2.getFloats();
+			var eq = true;
+			for (i => f in flt) {
+				if (hxd.Math.abs(f - flt2[i]) > 0.00001) {
+					eq = false;
+					break;
+				}
+			}
+			if (eq) {
+				trace("Ok");
+			} else {
+				trace("Error");
+				trace(abs);
+				trace(abs2);
+			}
+		}
+
+		function testRelTransform() {
+			var abs = getRelativeTransform(parent?.parent, true);
+
+			var abs2 = local3d.getAbsPos();
+			var grandPa = parent?.parent?.to(Object3D);
+			var root = grandPa?.local3d.getAbsPos() ?? h3d.Matrix.I();
+			root.invert();
+			abs2.multiply(abs2, root);
+
+			var flt = abs.getFloats();
+			var flt2 = abs2.getFloats();
+			var eq = true;
+			for (i => f in flt) {
+				if (hxd.Math.abs(f - flt2[i]) > 0.00001) {
+					eq = false;
+					break;
+				}
+			}
+			if (eq) {
+				trace("Ok");
+			} else {
+				trace("Error");
+				trace(abs);
+				trace(abs2);
+			}
+		}
+
+		ctx.build(
+			<category("Abs pos")>
+				<button("getAbsPos") onClick={testAbsPos}/>
+				<button("getRelativeTransform") onClick={testRelTransform}/>
+			</category>
+		);
 	}
 
 	@:keep

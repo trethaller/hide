@@ -12,14 +12,26 @@ hui-menu {
 	}
 
 	>#itemsContainer {
-		min-width: 150;
+		width: 175;
 		max-height: 250;
 		overflow: scroll;
 
 		layout: vertical;
+
+		> .scrollbar {
+			x: 2;
+			margin-right: 2;
+
+			width: 2;
+
+			>.cursor {
+				width: 2;
+			}
+		}
+
 	}
 
-	min-width: 150;
+	width: 175;
 
 	max-height: 400;
 }
@@ -40,6 +52,7 @@ hui-menu-item {
 
 	spacing: 4;
 
+	cursor: button;
 
 	&:hover {
 		> hui-background {
@@ -71,21 +84,37 @@ hui-menu-item {
 	}
 
 	>#content {
-		auto-size-width: 1;
-		fill-width: 1;
-
-
 		>hui-text {
 			margin-bottom: 4;
 			line-break: false;
 		}
+		auto-size-width: 1;
+		overflow: hidden;
+	}
+
+	>#keys {
+
+		halign: right;
+		>hui-text {
+			margin-bottom: 4;
+			line-break: false;
+			color: #666;
+			base-font: regular-small;
+		}
 	}
 
 	>#end-of-line {
+		visible: false;
+	}
+
+	&.has-child >#end-of-line {
+		visible: true;
+		halign: right;
 		min-width: @item-height;
 		min-height: @item-height;
 		background-type: hui;
 		> hui-background {
+			image: "ui/icons/chevronRight.png" fit;
 			image-color: @color-foreground;
 		}
 	}
@@ -93,6 +122,7 @@ hui-menu-item {
 	&.separator {
 		content-valign: bottom;
 		height: 16;
+		cursor: default;
 
 		&:hover {
 			> hui-background {

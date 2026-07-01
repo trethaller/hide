@@ -1,6 +1,9 @@
 package hrt.prefab;
 import hxd.Math;
 
+@:prefabIcon(HuiRes.ui.icons.prefab.object2d)
+@:prefabName("Object 2D")
+@:prefabCategory("2D")
 class Object2D extends Prefab {
 
 	public var local2d : h2d.Object = null;
@@ -159,6 +162,14 @@ class Object2D extends Prefab {
 		);
 	}
 
+	override function editorRemoveInstanceObjects() : Void {
+		if (local2d != null) {
+			local2d.remove();
+			local2d = null;
+		}
+		super.editorRemoveInstanceObjects();
+	}
+
 	#if editor
 	override function getHideProps() : hide.prefab.HideProps {
 		// Check children
@@ -166,13 +177,6 @@ class Object2D extends Prefab {
 			icon : children == null || children.length > 0 ? "folder-open" : "genderless",
 			name : "Group 2D"
 		};
-	}
-
-	override function editorRemoveInstanceObjects() : Void {
-		if (local2d != null) {
-			local2d.remove();
-		}
-		super.editorRemoveInstanceObjects();
 	}
 
 	override function edit( ctx : hide.prefab.EditContext ) {

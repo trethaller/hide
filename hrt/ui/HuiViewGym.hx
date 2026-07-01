@@ -14,10 +14,13 @@ class HuiViewGym extends HuiView<{}> {
 			<hui-tab-container>
 				<gym-widgets display-name="Widgets"/>
 				<gym-layouts display-name="Layouts"/>
+				<gym-search display-name="Search"/>
+				<gym-hui-background display-name="HuiBackground"/>
+				<gym-hui-drag-and-drop display-name="DragAndDrop"/>
 			</hui-tab-container>
 		</hui-view-gym>
 
-	override function getDisplayName() : String {
+	override function getViewName() : String {
 		return "Hui Gym";
 	}
 
@@ -29,6 +32,24 @@ class GymWidgets extends HuiElement {
 
 	static var SRC =
 		<gym-widgets>
+			<hui-text("hui-gradient-box")/>
+			<hui-element class="example">
+				<hui-gradient-box/>
+			</hui-element>
+
+			<hui-text("hui-texture-choice")/>
+			<hui-element class="example">
+				<hui-texture-choice/>
+			</hui-element>
+
+			<hui-text("hui-scene")/>
+			<hui-element class="example">
+				<hui-split-container direction="horizontal">
+					<hui-element class="panel"><hui-scene id="scene-a"/></hui-element>
+					<hui-element class="panel"><hui-scene id="scene-b"/></hui-element>
+				</hui-split-container>
+			</hui-element>
+
 			<hui-text("hui-tree")/>
 			<hui-element class="example">
 				<hui-tree id="tree"/>
@@ -52,6 +73,8 @@ class GymWidgets extends HuiElement {
 				<hui-element class="hui-background example-1"></hui-element>
 				<hui-element class="hui-background example-2"></hui-element>
 				<hui-element class="hui-background example-3"></hui-element>
+				<hui-element class="hui-background example-4"></hui-element>
+				<hui-element class="hui-background example-5"></hui-element>
 			</hui-element>
 
 
@@ -125,6 +148,11 @@ class GymWidgets extends HuiElement {
 					</hui-element>
 				</hui-element>
 			</hui-element>
+
+			<hui-text("curve-editor")/>
+			<hui-element class="example">
+				<hui-curve-box/>
+			</hui-element>
 		</gym-widgets>
 
 	function new(?parent) {
@@ -133,6 +161,7 @@ class GymWidgets extends HuiElement {
 
 		setupTree();
 		setupCommands();
+		setupScene();
 	}
 
 	function testMenu() :  Array<HuiMenu.MenuItem> {
@@ -148,8 +177,8 @@ class GymWidgets extends HuiElement {
 		return [
 					{label: "File"},
 					{label: "Edit"},
-					{label: "Copy", icon: "ui/icons/copy.png"},
-					{label: "Paste"},
+					{label: "Copy", icon: hrt.ui.HuiRes.ui.icons.copy, keys: "Ctrl+C"},
+					{label: "Paste", keys: "Ctrl+V"},
 					{label: "Disabled", enabled: false},
 					{isSeparator: true},
 					{label: "Recmenu", menu: submenu,},
@@ -264,6 +293,10 @@ class GymWidgets extends HuiElement {
 			});
 		}
 
+		tree.onItemContextMenu = (item) -> {
+			uiBase.contextMenu([{label: item?.name ?? "no item"}]);
+		}
+
 		tree.getItemName = (item) -> {
 			return item?.name ?? "";
 		}
@@ -277,6 +310,57 @@ class GymWidgets extends HuiElement {
 				return items;
 			return item.children;
 		};
+
+		tree.onItemContextMenu = (item) -> {
+			return uiBase.contextMenu([{label:"Rename", enabled: item != null, click: () -> {
+				tree.rename(item, (str) -> {
+					item.name = str;
+					tree.rebuild(item);
+				});
+			}}]);
+		}
+
+		tree.dragAndDropInterface = {
+			onDragStart: (item) -> {
+				var op = tree.startDrag("testDrag", tree.getSelectedItems());
+				op.setPreviewText("" + tree.getSelectedItems());
+			},
+			getItemDropFlags: function(item, op) : hrt.ui.HuiTree.DropFlags {
+				if (op.type == "testDrag") {
+					return hrt.ui.HuiTree.DropFlag.Reorder | hrt.ui.HuiTree.DropFlag.Reparent;
+				}
+				return hrt.ui.HuiTree.DropFlags.ofInt(0);
+			},
+			onDrop: (item, where, op) -> {
+				if (op.type == "testDrag") {
+					hide.Ide.showInfo('Dropped ${op.data} $where $item');
+				}
+			}
+		};
+	}
+
+	function setupScene() {
+		for (scene in [sceneA, sceneB]) {
+			scene.s3d.renderer = h3d.mat.MaterialSetup.current.createRenderer();
+			scene.s3d.lightSystem = h3d.mat.MaterialSetup.current.createLightSystem();
+
+			var cameraController = new h3d.scene.CameraController.OrbitCameraController(scene.s3d);
+			var sphere = new h3d.scene.Sphere(0xFFFFFFFF, scene.s3d);
+
+			var flow = new h2d.Flow(scene.s2d);
+			flow.x = 8;
+			flow.y = 8;
+			flow.buildBackground(h2d.Tile.fromColor(0x777777));
+			var text = new h2d.Text(hxd.res.DefaultFont.get(), flow);
+			text.text = "hello world";
+			flow.enableInteractive = true;
+			flow.interactive.onClick = (e) -> hide.Ide.showInfo("Clicked hello world");
+			flow.interactive.cursor = Button;
+
+			var int = new h3d.scene.Interactive(new h3d.col.Sphere(), sphere);
+			int.onClick = (e) -> hide.Ide.showInfo("Clicked box");
+			int.cursor = Button;
+		}
 	}
 }
 
@@ -328,5 +412,197 @@ class GymLayouts extends HuiElement {
 		</gym-layouts>
 }
 
+class GymSearch extends HuiElement {
+	static var SRC = <gym-search>
+		<hui-input-box id="search-box" class="search"/>
+		<hui-virtual-list id="results"/>
+		<hui-text id="time"/>
+	</gym-search>
+
+	var allFiles : Array<String> = [];
+	var allFilesLowercase : Array<String> = [];
+	var currentSearch : Int = 0;
+
+	public function new(?parent) {
+		super(parent);
+		initComponent();
+
+		searchBox.onChange = (tmp) -> searchFiles();
+
+		results.generateItem = (i:Dynamic) -> {
+			var e = new HuiElement();
+
+			if (i is String) {
+				new HuiText(i, e);
+			} else {
+				var str = allFiles[i.pos];
+				var lastCharPos: Int = i.lastCharPos;
+				var split = str.substr(0, lastCharPos-searchBox.text.length+1) + "<h>" + str.substr(lastCharPos-searchBox.text.length+1, searchBox.text.length) + "</h>" + str.substr(lastCharPos+1);
+				new HuiText('$split (${i.distance})', e);
+			}
+
+			return e;
+		}
+
+		searchFiles();
+	}
+
+	public function searchFiles() {
+		currentSearch ++;
+		var thisSearch = currentSearch;
+		var needle = searchBox.text.toLowerCase();
+
+		var items : Array<String> = [];
+
+		if (needle.length == 0) {
+			items = allFiles;
+
+			results.setItems(cast items);
+
+			time.text = "";
+			return;
+		}
+
+
+		hide.Search.batchFuzzySearchAsync(allFilesLowercase, needle, 0.01, 3, (results: Array<hide.Search.BatchFuzzySearchAsyncResult>, progress: Int) -> {
+			if (thisSearch != currentSearch)
+				return false;
+
+			if (items.length == 0 && progress == allFiles.length) {
+				items.push("no matches");
+			}
+
+			time.text = 'Searching $progress / ${allFiles.length} ( ${Std.int(progress / allFiles.length * 100)}% ) - ${results.length} results';
+
+			this.results.setItems(cast results);
+
+			return true;
+		});
+
+		// var start = haxe.Timer.stamp();
+
+		// var search: Array<{path: String, distance: Int}> = [];
+		// for (file in allFiles) {
+		// 	var r = hide.Search.searchWithErrors(file.toLowerCase(), needle);
+		// 	if (r.distance > 4)
+		// 		continue;
+		// 	search.push({path: file, distance: r.distance});
+		// }
+
+		// search.sort((a, b) -> Reflect.compare(a.distance, b.distance));
+
+		// for (file in search) {
+		// 	items.push('${file.path} (${file.distance})');
+		// }
+
+		// if (search.length == 0) {
+		// 	items.push("no matches");
+		// }
+
+		// results.setItems(cast items);
+
+		// time.text = 'Searching ${allFiles.length} took ${(haxe.Timer.stamp() - start) * 1000.0}ms';
+	}
+
+	override function sync(ctx:h2d.RenderContext) {
+		super.sync(ctx);
+
+		var current : h2d.Object = this;
+		while(current != null) {
+			if (!current.visible)
+				return;
+			current = current.parent;
+		}
+
+		if (allFiles.length == 0) {
+			// init filesystem
+			function rec(path: String) {
+				var files = sys.FileSystem.readDirectory(path);
+				for (file in files) {
+					var childPath = path + "/" + file;
+					if (sys.FileSystem.isDirectory(childPath)) {
+						rec(childPath);
+					} else {
+						allFiles.push(childPath);
+						allFilesLowercase.push(childPath.toLowerCase());
+					}
+				}
+			}
+
+			rec(hide.Ide.inst.resourceDir);
+		}
+	}
+}
+
+class GymHuiBackground extends HuiElement {
+	static var SRC =
+		<gym-hui-background>
+			<hui-element class="example-1"/>
+			<hui-element class="example-2"/>
+			<hui-element class="example-3"/>
+			<hui-element class="example-4"/>
+			<hui-element class="example-5"/>
+			<hui-element class="example-6"/>
+
+			<hui-button class="btn-1"/>
+		</gym-hui-background>
+}
+
+class GymHuiDragAndDrop extends HuiElement {
+	static var SRC =
+		<gym-hui-drag-and-drop>
+
+			<hui-element id="draggable"><hui-text("drag me") id="draggable-text"/></hui-element>
+			<hui-element id="dropTarget1"><hui-text("drop on me") id="drop-target-text"/></hui-element>
+
+		</gym-hui-drag-and-drop>
+
+	function new(?parent) {
+		super(parent);
+		initComponent();
+
+		draggable.onDragStart = () -> {
+			var op = draggable.startDrag("gym-drag", "hello world");
+			op.setPreviewText("hello world");
+			draggable.dom.addClass("dragged");
+			draggableText.text = "dragged";
+		}
+
+		draggable.onDragEnd = (op) -> {
+			draggable.dom.removeClass("dragged");
+			draggableText.text = "drag me";
+		}
+
+		dropTarget1.onAnyDragStart = (op) -> {
+			if (op.type == "gym-drag") {
+				dropTarget1.dom.addClass("can-drop");
+			}
+		}
+
+		dropTarget1.onAnyDragEnd = (op) -> {
+			if (op.type == "gym-drag") {
+				dropTarget1.dom.removeClass("can-drop");
+			}
+		}
+
+		dropTarget1.onDragOver = (op) -> {
+			dropTarget1.dom.addClass("drag-over");
+			dropTargetText.text = "dragging over";
+		}
+
+		dropTarget1.onDragMove = (op) -> {
+			dropTargetText.text = 'over ${op.event.relX}, ${op.event.relY}';
+		}
+
+		dropTarget1.onDragOut = (op) -> {
+			dropTarget1.dom.removeClass("drag-over");
+			dropTargetText.text = "drop on me";
+		}
+
+		dropTarget1.onDrop = (op) -> {
+			hide.Ide.showInfo("Dropped " + op.data);
+		}
+	}
+}
 
 #end

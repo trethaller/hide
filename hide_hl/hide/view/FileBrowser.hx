@@ -12,12 +12,16 @@ class FileBrowser extends HuiView<{path: String}> {
 		var path = state.path ?? hide.Ide.inst.resourceDir;
 		fileBrowser = new HuiFileBrowser(path, this);
 		fileBrowser.onOpen = (file) -> {
-			hide.Ide.inst.openFile(file.fullPath);
+			hide.Ide.inst.openFile(file.path);
 		};
 	}
 
-	override function getDisplayName():String {
+	override function getViewName():String {
 		return "File Browser";
+	}
+
+	override function getContextMenuContent(content:Array<hrt.ui.HuiMenu.MenuItem>) {
+		content.push({label: "Refresh", click: () -> fileBrowser.markRefresh()});
 	}
 
 	static var _ = HuiView.register("fileBrowser", FileBrowser);

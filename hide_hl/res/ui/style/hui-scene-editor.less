@@ -1,0 +1,103 @@
+hui-scene-editor {
+	fill-width: 1;
+
+	> #main-split {
+		second-min-size: 300;
+		anchor-to: end;
+
+		> #scene-tree-split {
+			second-min-size: 300;
+			anchor-to: end;
+		}
+	}
+
+	>#critical-error {
+		visible: false;
+		halign: middle;
+		valign: middle;
+	}
+
+	#inspector-panel {
+		valign: top;
+		layout: vertical;
+		spacing: 4;
+
+		.class-name {
+			padding: 4;
+			padding-bottom: 0;
+			halign: left;
+		}
+
+		> #root {
+
+			valign: top;
+			layout: vertical;
+
+			overflow: scroll;
+
+			#content {
+				padding-right: 10;
+
+				spacing: 3;
+			}
+
+			.kit-line {
+				height: 16;
+				spacing: 2;
+			}
+
+			> hui-line {
+				fill-width: true;
+			}
+
+			.first {
+				width: 80;
+				height: 16;
+				> * {
+					halign: right;
+				}
+			}
+
+
+			.kit-label {
+				margin-right: 5;
+				> * {
+					halign: right;
+				}
+
+				hui-text {
+					margin-bottom: 3;
+				}
+			}
+
+			.kit-lock {
+				width: 16;
+				height: 16;
+
+				background-type: hui;
+				> hui-background {
+					image: "ui/icons/link_break.png" fit;
+					image-color: @color-foreground-muted;
+				}
+
+				&:hover > hui-background {
+					image-color: @color-foreground;
+				}
+
+				&.locked > hui-background {
+					image: "ui/icons/link.png" fit;
+				}
+			}
+		}
+	}
+
+	&.critical-error {
+		&>#critical-error {
+			visible: true;
+		}
+
+		>#main-split {
+			visible: false;
+		}
+	}
+}

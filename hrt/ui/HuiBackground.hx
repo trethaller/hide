@@ -13,9 +13,10 @@ class BackgroundShader extends hxsl.Shader {
 		@param var backgroundColor : Vec4;
 
 		@const @param var useShadow : Bool;
+		@const @param var shadowInset : Bool;
 		@param var shadowOffset : Vec2;
 		@param var shadowBlurRadius : Float;
-		@param var shadowSpreadRadius : Float;
+		@param var shadowSpreadRadius : Vec2;
 		@param var shadowColor : Vec4;
 
 		@const @param var useImage : Bool;
@@ -28,6 +29,9 @@ class BackgroundShader extends hxsl.Shader {
 		@param var imgAlpha : Float = 1.0;
 		@param var imgScale : Float = 1.0;
 		@param var imgOffset : Vec2;
+		@param var imgShadow : Vec4;
+		@param var imgShadowOffset : Vec2;
+		@const var useImgShadow: Bool;
 
 		@const @param var useGradient : Bool;
 		@const(4) @param var gradBlendMode : Int;
@@ -55,6 +59,7 @@ class BackgroundShader extends hxsl.Shader {
 		function fragment() {
 			var pos = (calculatedUV - 0.5) * size;
 			var smooth = smoothSpan;
+			var debugSDF = 0.0;
 
 			var baseAlpha = pixelColor.a;
 
@@ -65,8 +70,8 @@ class BackgroundShader extends hxsl.Shader {
 			pos += offset;
 			var relPos = pos / rectSize;
 
-			if(useShadow) {
-				var dist = boxSDF(pos - shadowOffset, rectSize - shadowBlurRadius * 0.5) - shadowBlurRadius * 0.5 - shadowSpreadRadius;
+			if(useShadow && !shadowInset) {
+				var dist = boxSDF(pos - shadowOffset, rectSize + shadowSpreadRadius, 0);
 				pixelColor = vec4(shadowColor.rgb, shadowColor.a * saturate(smoothstep(-shadowBlurRadius, shadowBlurRadius , -dist)));
 			}
 
@@ -74,7 +79,7 @@ class BackgroundShader extends hxsl.Shader {
 			var outlineAlpha = 0.0;
 
 			if (!pixelPerfect) {
-				var dist = boxSDF(pos, rectSize);
+				var dist = boxSDF(pos, rectSize, 0);
 				alpha = saturate(-dist/smoothSpan);
 
 				// https://www.desmos.com/calculator/fgpiqhvjvr
@@ -104,16 +109,26 @@ class BackgroundShader extends hxsl.Shader {
 				var halfBorderWidth = (outline-1) / 2.0;
 				var remaining = fract(halfBorderWidth)+0.5;
 				var boxSize = rectSize - remaining;
+				var boxSizeOutline = boxSize;
 
-				if (outline == 0.0) {
-					boxSize += 1.0;
+				// reset box size if the outline is not on the edge so
+				// it get properly antialiased too
+				if (outline == 0.0 || outlineOffset != 0.0) {
+					boxSize = rectSize;
 				}
 
-				var dist = boxSDF(pos, boxSize);
+				var dist = boxSDF(pos, boxSize, 0);
+				debugSDF = dist;
 
 				if(useOutline) {
-					alpha = dist > 0 ? 0.0 : 1.0;
-					outlineAlpha = saturate(1+halfBorderWidth-abs(dist+floor(halfBorderWidth)));
+					var distOutline = dist;
+					if (outlineOffset != 0.0) {
+						distOutline = boxSDF(pos, boxSizeOutline, 0) + outlineOffset;
+						alpha = saturate(0.5-dist);
+					} else {
+						alpha = (dist > 0 ? 0.0 : 1.0);
+					}
+					outlineAlpha = saturate(1+halfBorderWidth-abs((distOutline)+floor(halfBorderWidth)));
 				} else {
 					alpha = saturate(0.5-dist);
 				}
@@ -136,6 +151,7 @@ class BackgroundShader extends hxsl.Shader {
 				var imgSize = imgTex.size() * tsize * imgScale;
 				var tOffset = imgOffset / imgTex.size();
 
+
 				if(imgScaleMode == 0) // Center
 					tuv = saturate(pos / imgSize + 0.5);
 				else if(imgScaleMode == 1) { // Fit
@@ -149,6 +165,11 @@ class BackgroundShader extends hxsl.Shader {
 					tuv = relPos * 0.5 + 0.5;
 				var c = imgTex.get(imgBounds.xy + tOffset + tuv * tsize) * imgColor;
 
+				if (useImgShadow) {
+					var c = imgTex.get(imgBounds.xy + tOffset + tuv * tsize - imgShadowOffset / imgTex.size()) * imgColor;
+					fillColor = blendMode(fillColor, imgShadow, c.a * imgShadow.a, imgBlendMode);
+				}
+
 				fillColor = blendMode(fillColor, c, imgAlpha * c.a, imgBlendMode);
 			}
 
@@ -158,20 +179,29 @@ class BackgroundShader extends hxsl.Shader {
 				fillColor = blendMode(fillColor, g, gradAlpha, gradBlendMode);
 			}
 
-			if(useShadow)
+			if(useShadow && !shadowInset)
 				pixelColor = alphaBlend(pixelColor, fillColor, alpha);
 			else
 				pixelColor = vec4(fillColor.rgb, fillColor.a * alpha);
+
+			if(useShadow && shadowInset) {
+				var dist = boxSDF(pos - shadowOffset, rectSize - shadowSpreadRadius, shadowBlurRadius * 1.0);
+				//debugSDF = dist;
+				var shadow = vec4(shadowColor.rgb, shadowColor.a * saturate(smoothstep(-shadowBlurRadius, shadowBlurRadius , dist)));
+				pixelColor = alphaBlend(pixelColor, shadow, alpha);
+			}
 
 			pixelColor = alphaBlend(pixelColor, outlineColor, outlineAlpha);
 
 			pixelColor.a *= baseAlpha;
 			if (debug) {
-				pixelColor.rgba = pixelColor.rgba * 0.00001 + vec4(1.0,0.0,0.0,1.0);
+				pixelColor.rgba = pixelColor.rgba * 0.00001 + vec4(vec3(fract(debugSDF / 32.0)),1.0);
+				if (dist<0.0)
+					pixelColor.r = 0.0;
 			}
 		}
 
-		function boxSDF(pos: Vec2, size: Vec2) : Float {
+		function boxSDF(pos: Vec2, size: Vec2, minRadius: Float) : Float {
 			// map coordinates to top-left, top-right, bottom-right and bottom-left quadrants respectively
 			var index = if (pos.x < 0) {
 				pos.y < 0 ? 0 : 3;
@@ -179,9 +209,10 @@ class BackgroundShader extends hxsl.Shader {
 				pos.y < 0 ? 1 : 2;
 			}
 
-			var skew = borderSkew[(index == 0 || index == 3) ? 0 : 1];
+			var halfIndex = (index == 0 || index == 3) ? 0 : 1;
+			var skew = borderSkew[halfIndex];
 			var bevel = borderBevel[index];
-			var radius = borderRadius[index];
+			var radius = min(max(borderRadius[index], minRadius), size[halfIndex]);
 
 			// select the right sdf function depending on which corner value is the most
 			// relevant for our current quadrant
@@ -190,7 +221,7 @@ class BackgroundShader extends hxsl.Shader {
 			} else if (bevel > radius) {
 				return sdBevelBox(pos, size, vec4(borderBevel));
 			} else {
-				return sdRoundBox(pos, size, vec4(borderRadius));
+				return sdRoundBox(pos, size, vec4(min(max(borderRadius, radius), size[halfIndex])));
 			}
 		}
 
@@ -364,7 +395,7 @@ class HuiBackground extends h2d.ScaleGrid implements h2d.domkit.Object {
 		return v;
 	}
 
-	@:p(bgShadow) public var shadow(never, set) : { offsetX: Float, offsetY: Float, blurRadius: Float, spreadRadius: Float, color: Int };
+	@:p(bgShadow) public var shadow(never, set) : hrt.ui.CssParser.BackgroundShadow;
 	function set_shadow(s) {
 		shader.useShadow = s != null;
 		if(s != null) {
@@ -372,9 +403,17 @@ class HuiBackground extends h2d.ScaleGrid implements h2d.domkit.Object {
 			shadowOffsetX = s.offsetX;
 			shadowOffsetY = s.offsetY;
 			shadowBlurRadius = s.blurRadius;
-			shadowSpreadRadius = s.spreadRadius;
+			shadowSpreadRadiusX = s.spreadRadiusX;
+			shadowSpreadRadiusY = s.spreadRadiusY;
+			shader.shadowInset = s.inset;
 		}
 		return s;
+	}
+
+	@:p public var shadowInset(never, set) : Bool;
+	function set_shadowInset(v) {
+		shader.shadowInset = v;
+		return v;
 	}
 
 	@:p(color) @:t(color) public var shadowColor(never, set) : Int;
@@ -390,9 +429,17 @@ class HuiBackground extends h2d.ScaleGrid implements h2d.domkit.Object {
 	@:p @:t public var shadowOffsetX: Float;
 	@:p @:t public var shadowOffsetY: Float;
 	@:p @:t public var shadowBlurRadius : Float;
-	@:p @:t public var shadowSpreadRadius : Float;
+	@:p @:t public var shadowSpreadRadius(never, set) : Float;
+	@:p @:t public var shadowSpreadRadiusX : Float;
+	@:p @:t public var shadowSpreadRadiusY : Float;
 
-	function setTexture(t: h3d.mat.Texture) {
+	function set_shadowSpreadRadius(v: Float) {
+		shadowSpreadRadiusX = v;
+		shadowSpreadRadiusY = v;
+		return v;
+	}
+
+	public function setTexture(t: h3d.mat.Texture) {
 		if(t == null) {
 			shader.useImage = false;
 			shader.imgTex = null;
@@ -411,6 +458,8 @@ class HuiBackground extends h2d.ScaleGrid implements h2d.domkit.Object {
 				imageMode = v.mode;
 				shader.imgBounds.set(0,0,1,1);
 			} catch(e: Dynamic) { }
+		} else {
+			setTexture(null);
 		}
 		return v;
 	}
@@ -475,6 +524,15 @@ class HuiBackground extends h2d.ScaleGrid implements h2d.domkit.Object {
 	function set_imageBlend(v) { shader.imgBlendMode = cast v; return v; }
 	@:p(bgImageMode) public var imageMode(never, set) : Null<CssParser.BackgroundImageMode>;
 	function set_imageMode(v) { shader.imgScaleMode = cast v; return v; }
+
+	@:p(color) public var imageShadow(never, set) : Int;
+	function set_imageShadow(v) {shader.useImgShadow = true; shader.imgShadow.setColor(v); return v;};
+	@:p(tilePos) public var imageShadowOffset(never, set) : Null<{ p : Int, ?y : Int }>;
+	function set_imageShadowOffset(v) {
+		shader.useImgShadow = true;
+		shader.imgShadowOffset.set(v.p, v.y ?? v.p);
+		return v;
+	};
 
 	@:p(bgGradient) public var gradient(never, set) : { angle: Float, color1: Int, color2: Int };
 	function set_gradient(v) {
@@ -566,29 +624,36 @@ class HuiBackground extends h2d.ScaleGrid implements h2d.domkit.Object {
 		// skip super.checkUpdate()
 	}
 
-	override function draw( ctx ) {
+	override function sync( ctx ) {
 		x = 0;
 		y = 0;
 		var flowParent = Std.downcast(parent, h2d.Flow);
 
 		var scale = getScene().viewportScaleX;
 
-		var shadowExtraMargin = 0.0;
+		var extraMargin = 0.0;
 		if (shader.useShadow) {
 			shader.shadowOffset.x = shadowOffsetX * scale;
 			shader.shadowOffset.y = shadowOffsetY * scale;
 			shader.shadowBlurRadius = shadowBlurRadius * scale;
-			shader.shadowSpreadRadius = hxd.Math.max(shadowSpreadRadius, 0.5) * scale;
-			shadowExtraMargin = hxd.Math.ceil(hxd.Math.max(hxd.Math.abs(shadowOffsetX), hxd.Math.abs(shadowOffsetY)) + hxd.Math.max(shadowSpreadRadius, 0.5) + shadowBlurRadius);
+			shader.shadowSpreadRadius.set(shadowSpreadRadiusX * scale, shadowSpreadRadiusY * scale);
+			if (!shader.shadowInset) {
+				extraMargin = hxd.Math.ceil(hxd.Math.max(hxd.Math.abs(shadowOffsetX), hxd.Math.abs(shadowOffsetY)) + hxd.Math.max(shadowSpreadRadiusX, shadowSpreadRadiusY) + shadowBlurRadius);
+			}
 		}
+
+		if (shader.outlineOffset < 0) {
+			extraMargin = hxd.Math.max(extraMargin, -shader.outlineOffset+1);
+		}
+
 		if (flowParent != null && this == @:privateAccess flowParent.background) {
 			width = @:privateAccess flowParent.flowCeil(flowParent.calculatedWidth);
 			height = @:privateAccess flowParent.flowCeil(flowParent.calculatedHeight);
 
-			width += 2 * shadowExtraMargin;
-			height += 2* shadowExtraMargin;
-			x -= shadowExtraMargin;
-			y -= shadowExtraMargin;
+			width += 2 * extraMargin;
+			height += 2* extraMargin;
+			x -= extraMargin;
+			y -= extraMargin;
 		}
 
 		calcAbsPos();
@@ -598,10 +663,10 @@ class HuiBackground extends h2d.ScaleGrid implements h2d.domkit.Object {
 
 		shader.size.set(width, height);
 		shader.outlineThickness.set(_outlineThickness.x * scale, _outlineThickness.y * scale, _outlineThickness.z * scale, _outlineThickness.w * scale);
-		shader.margins.x = (_margin.x + shadowExtraMargin) * scale;
-		shader.margins.y = (_margin.y + shadowExtraMargin) * scale;
-		shader.margins.z = (_margin.z + shadowExtraMargin) * scale;
-		shader.margins.w = (_margin.w + shadowExtraMargin) * scale;
+		shader.margins.x = (_margin.x + extraMargin) * scale;
+		shader.margins.y = (_margin.y + extraMargin) * scale;
+		shader.margins.z = (_margin.z + extraMargin) * scale;
+		shader.margins.w = (_margin.w + extraMargin) * scale;
 
 		if(borderRadius != null) {
 			var maxRad = hxd.Math.min(width, height) / 2;
@@ -636,7 +701,7 @@ class HuiBackground extends h2d.ScaleGrid implements h2d.domkit.Object {
 		else
 			shader.borderSkew.set(0, 0);
 
-		super.draw(ctx);
+		super.sync(ctx);
 	}
 }
 

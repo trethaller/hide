@@ -40,7 +40,7 @@ class HuiPopup extends HuiElement {
 		<hui-popup>
 		</hui-popup>
 
-	public var anchor(default, set) : Anchor = {object: Point(0,0), directionX: EndOutside, directionY: EndOutside};
+	public var anchor(default, set) : Anchor = null;
 
 	final anchorMargin: Float = 4;
 	var modal: HuiModalContainer = null;
@@ -52,7 +52,10 @@ class HuiPopup extends HuiElement {
 		super(parent);
 		initComponent();
 
-		onAfterReflow = onAfterReflowInternal;
+		makeInteractive();
+		interactive.propagateEvents = false;
+
+		onAfterReflow = () -> updateAnchor(true);
 	}
 
 	/**
@@ -102,7 +105,15 @@ class HuiPopup extends HuiElement {
 		return anchorDirection;
 	}
 
-	public function onAfterReflowInternal() {
+	public function updateAnchor(fixDirection: Bool) {
+		if (parentElement == null)
+			return;
+		if (anchor == null) {
+			x = hxd.Math.round((parentElement.calculatedWidth - calculatedWidth) * 0.5);
+			y = hxd.Math.round((parentElement.calculatedHeight - calculatedHeight) * 0.5);
+			return;
+		}
+
 		var left: Float;
 		var top: Float;
 		var down: Float;
@@ -119,13 +130,17 @@ class HuiPopup extends HuiElement {
 				down = element.absY + element.calculatedHeight;
 		}
 
-		var candidateX = constraint(anchor.directionX, left, right, calculatedWidth);
-		var anchorX = fixAnchor(anchor.directionX, candidateX, calculatedWidth, 0, parentElement.calculatedWidth);
-		x = constraint(anchorX, left, right, calculatedWidth);
+		if (fixDirection) {
+			var candidateX = constraint(anchor.directionX, left, right, calculatedWidth);
+			anchor.directionX = fixAnchor(anchor.directionX, candidateX, calculatedWidth, 0, parentElement.calculatedWidth);
+		}
+		x = constraint(anchor.directionX, left, right, calculatedWidth);
 
-		var candidateY = constraint(anchor.directionY, top, down, calculatedHeight);
-		var anchorY = fixAnchor(anchor.directionY, candidateY, calculatedHeight, 0, parentElement.calculatedHeight);
-		y = constraint(anchorY, top, down, calculatedHeight);
+		if (fixDirection) {
+			var candidateY = constraint(anchor.directionY, top, down, calculatedHeight);
+			anchor.directionY = fixAnchor(anchor.directionY, candidateY, calculatedHeight, 0, parentElement.calculatedHeight);
+		}
+		y = constraint(anchor.directionY, top, down, calculatedHeight);
 	}
 
 	public function close() {
@@ -142,15 +157,14 @@ class HuiPopup extends HuiElement {
 		super.onRemove();
 	}
 
-
 	/**
 		Add popup in parent in a way that it can be close when the user clicks anywhere else. Return the created modal element
 	**/
 	function addDismissable(?parent: h2d.Object) : HuiModalContainer {
-		modal = new HuiModalContainer(parent);
+		modal = new HuiModalContainer(false, parent);
 		modal.addChild(this);
 
-		modal.onClick = (e: hxd.Event) -> {
+		modal.onPush = (e: hxd.Event) -> {
 			// We need to delay the closing of the
 			// popup because it messes up with the input handling code
 			// to remove interactibles from the scene in the middle of the event handling code
@@ -166,6 +180,25 @@ class HuiPopup extends HuiElement {
 		onCloseListeners.push(() -> modal.remove());
 
 		return modal;
+	}
+
+	/**
+		Add popup in parent that cannot be dismissed
+	**/
+	function addModal(?parent: h2d.Object) : HuiModalContainer {
+		modal = new HuiModalContainer(true, parent);
+		modal.addChild(this);
+
+		modal.onKeyDown = onKeyDown;
+		modal.onKeyUp = onKeyUp;
+		modal.onTextInput = onTextInput;
+		onCloseListeners.push(() -> modal.remove());
+		return modal;
+	}
+
+	override function sync(ctx:h2d.RenderContext) {
+		super.sync(ctx);
+		updateAnchor(false);
 	}
 }
 

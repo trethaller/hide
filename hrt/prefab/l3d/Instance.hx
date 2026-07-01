@@ -1,6 +1,8 @@
 package hrt.prefab.l3d;
 using Lambda;
 
+@:prefabIcon(HuiRes.ui.icons.prefab.instance)
+
 class Instance extends Object3D {
 
 	var instance : Prefab;
@@ -14,6 +16,24 @@ class Instance extends Object3D {
 
 	override function edit2(ctx:hrt.prefab.EditContext2) {
 		super.edit2(ctx);
+	}
+
+	override function makeInteractive():hxd.SceneEvents.Interactive {
+		var int = super.makeInteractive();
+		if( int == null ) {
+			// no meshes ? do we have an icon instead...
+			var follow = Std.downcast(findFirstLocal2d(), h2d.ObjectFollower);
+			if( follow != null ) {
+				var bmp = Std.downcast(follow.getChildAt(0), h2d.Bitmap);
+				if( bmp != null ) {
+					var i = new h2d.Interactive(bmp.tile.width, bmp.tile.height, bmp);
+					i.x = bmp.tile.dx;
+					i.y = bmp.tile.dy;
+					int = i;
+				}
+			}
+		}
+		return int;
 	}
 
 	#if editor
@@ -50,24 +70,6 @@ class Instance extends Object3D {
 			}
 		}
         return super.makeObject(parent3d);
-	}
-
-	override function makeInteractive():hxd.SceneEvents.Interactive {
-		var int = super.makeInteractive();
-		if( int == null ) {
-			// no meshes ? do we have an icon instead...
-			var follow = Std.downcast(findFirstLocal2d(), h2d.ObjectFollower);
-			if( follow != null ) {
-				var bmp = Std.downcast(follow.getChildAt(0), h2d.Bitmap);
-				if( bmp != null ) {
-					var i = new h2d.Interactive(bmp.tile.width, bmp.tile.height, bmp);
-					i.x = bmp.tile.dx;
-					i.y = bmp.tile.dy;
-					int = i;
-				}
-			}
-		}
-		return int;
 	}
 
 	// ---- statics

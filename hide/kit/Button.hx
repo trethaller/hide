@@ -10,6 +10,7 @@ class Button extends Element {
 	public var big : Bool = false;
 	public var huge : Bool = false;
 	public var quiet : Bool = false;
+	public var noUndo: Bool = false;
 
 	var button : NativeElement;
 
@@ -29,13 +30,15 @@ class Button extends Element {
 	}
 
 	function broadcastClick() {
-		parent?.change(onClickChange, false);
+		parent?.change({callback: onClickChange, isTemporaryEdit: false, recordUndo: !noUndo});
 	}
 
 	/** Internal function passed to change() **/
 	function onClickChange() {
-		onClick();
-		@:privateAccess root.prefab?.updateInstance();
+		root.doTry(() -> {
+			onClick();
+			@:privateAccess root.prefab?.updateInstance();
+		});
 
 		var idPath = getIdPath();
 		for (childProperties in root.editedPrefabsProperties) {
@@ -43,8 +46,10 @@ class Button extends Element {
 			var childElement = childProperties.getElementByPath(idPath);
 			var childButton = Std.downcast(childElement, Button);
 			if (childButton != null) {
-				childButton.onClick();
-				@:privateAccess childProperties.prefab?.updateInstance();
+				childProperties.doTry(() -> {
+					childButton.onClick();
+					@:privateAccess childProperties.prefab?.updateInstance();
+				});
 			}
 		}
 	}
@@ -80,8 +85,13 @@ class Button extends Element {
 
 		syncHightlight();
 		#elseif hui
-		button = new hrt.ui.HuiButton();
+		var button =new hrt.ui.HuiButton();
+		this.button = button;
 		new hrt.ui.HuiText(label, button);
+		button.onClick = (e) -> {
+			if (e.button == 0)
+				onClick();
+		}
 		#end
 		setupPropLine(null, button);
 	}

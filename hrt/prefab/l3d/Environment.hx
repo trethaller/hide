@@ -2,6 +2,8 @@ package hrt.prefab.l3d;
 
 
 @:access(h3d.scene.pbr.Environment)
+@:prefabIcon(HuiRes.ui.icons.prefab.environment)
+
 class Environment extends Object3D {
 
 	@:s public var power : Float = 1.0;
@@ -29,7 +31,9 @@ class Environment extends Object3D {
 		}
 	}
 
-	function getBinaryPath( diffuse : Bool ) {
+	function getBinaryPath(diffuse : Bool, ?sourceMapPath : String) {
+		if (sourceMapPath == null)
+			sourceMapPath = this.sourceMapPath;
 		var path = new haxe.io.Path(sourceMapPath);
 		if( configName != null )
 			path.file += "-" + configName;
@@ -37,15 +41,24 @@ class Environment extends Object3D {
 		return path.toString();
 	}
 
-	function saveToBinary() {
+	function saveToBinary(diffuse: h3d.mat.Texture, specular : h3d.mat.Texture, sourceMapPath : String) {
 		#if (hl || hxnodejs)
 		var fs = cast(hxd.res.Loader.currentInstance.fs, hxd.fs.LocalFileSystem);
 		if( fs == null ) return;
-		var diffuse = hxd.Pixels.toDDSLayers([for( i in 0...6 ) env.diffuse.capturePixels(i)],true);
-		sys.io.File.saveBytes(fs.baseDir + getBinaryPath(true), diffuse);
-		var specular = hxd.Pixels.toDDSLayers([for( i in 0...6 ) for( mip in 0...env.getMipLevels() ) env.specular.capturePixels(i,mip)],true);
-		sys.io.File.saveBytes(fs.baseDir + getBinaryPath(false), specular);
+		var d = hxd.Pixels.toDDSLayers([for( i in 0...6 ) diffuse.capturePixels(i)],true);
+		sys.io.File.saveBytes(fs.baseDir + getBinaryPath(true, sourceMapPath), d);
+		var s = hxd.Pixels.toDDSLayers([for( i in 0...6 ) for( mip in 0...env.getMipLevels() ) specular.capturePixels(i,mip)],true);
+		sys.io.File.saveBytes(fs.baseDir + getBinaryPath(false, sourceMapPath), s);
 		#end
+	}
+
+	function compute() {
+		env.dispose();
+		env.specular = null;
+		env.diffuse = null;
+		env.source = shared.loadTexture(sourceMapPath);
+		env.compute();
+		saveToBinary(env.diffuse, env.specular, this.sourceMapPath);
 	}
 
 	override function updateInstance(?propName : String ) {
@@ -91,14 +104,8 @@ class Environment extends Object3D {
 		env.rotation = hxd.Math.degToRad(rotation);
 		env.power = power;
 
-		if( propName == "force" || (needLoad && !loadFromBinary()) ) {
-			env.dispose();
-			env.specular = null;
-			env.diffuse = null;
-			env.source = shared.loadTexture(sourceMapPath);
-			env.compute();
-			saveToBinary();
-		}
+		if( propName == "force" || (needLoad && !loadFromBinary()) )
+			compute();
 
 		var scene = local3d.getScene();
 		// Auto Apply on change

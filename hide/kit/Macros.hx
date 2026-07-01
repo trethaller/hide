@@ -87,6 +87,8 @@ class Macros {
 					onAnyChange = null;
 				}
 
+
+
 				var args : BuildExprArgs = {
 					markup: markup,
 					outputExprs: [],
@@ -95,6 +97,11 @@ class Macros {
 					globalElements: [],
 					onAnyChange: onAnyChange,
 					index: 0,
+				}
+
+				if (onAnyChange != null) {
+					args.outputExprs.push(macro var __any_change = $onAnyChange);
+					args.onAnyChange = macro __any_change;
 				}
 
 
@@ -453,6 +460,7 @@ class Macros {
 						block.push(macro @:pos(pos) @:privateAccess $elementExpr.fieldName = $v{fieldName});
 						block.push(macro @:pos(pos) $elementExpr.value = $field);
 						block.push(macro @:pos(pos) @:privateAccess $elementExpr.onFieldChange = (temp:Bool) -> $field = $elementExpr.value);
+						block.push(macro @:pos(pos) @:privateAccess $elementExpr.getFieldValue = () -> $field);
 
 					}
 
@@ -584,36 +592,44 @@ class Macros {
 	macro public static function tryAutoSelect(enumExpr: Expr, targetSelect: Expr) : Expr {
 		var enumType = Context.typeof(enumExpr);
 
-		var decls : Array<Expr> = [];
-		switch(enumType) {
-			case TAbstract(abstractType, _):
-				if (abstractType.toString() == "Int")
-					return macro {};
-				var statics = abstractType.get().impl.get().statics.get();
-				for (s in statics) {
-					if (s.meta.has(":value"))
-						decls.push(macro {value: $e{Context.getTypedExpr(s.expr())}, label: $v{camelToSpaceCase(s.name)}});
-				}
-			case TEnum(t, _):
-				var trueEnum = t.get();
-				var constructors = trueEnum.constructs.array();
+		function rec(type: Type) {
+			var decls : Array<Expr> = [];
+			switch(type) {
+				case TAbstract(abstractType, params):
 
-				// Reorder constructors in the order they appear in the file
-				constructors.sort((a,b) -> Reflect.compare(a.index, b.index));
-
-				for (constructor in constructors) {
-					var moduleName = trueEnum.module.substring(trueEnum.module.lastIndexOf(".") + 1);
-					var pack = trueEnum.pack.copy();
-					if (moduleName != trueEnum.name) {
-						pack.push(moduleName);
+					if (abstractType.toString() == "Int")
+						return macro {};
+					if (abstractType.toString() == "Null")
+						return rec(params[0]);
+					var statics = abstractType.get().impl.get().statics.get();
+					for (s in statics) {
+						if (s.meta.has(":value"))
+							decls.push(macro {value: $e{Context.getTypedExpr(s.expr())}, label: $v{camelToSpaceCase(s.name)}});
 					}
-					pack.push(trueEnum.name);
-					pack.push(constructor.name);
-					decls.push(macro {value: $p{pack}, label: $v{camelToSpaceCase(constructor.name)}});
-				}
-			default:
-				return macro {};
+
+				case TEnum(t, _):
+					var trueEnum = t.get();
+					var constructors = trueEnum.constructs.array();
+
+					// Reorder constructors in the order they appear in the file
+					constructors.sort((a,b) -> Reflect.compare(a.index, b.index));
+
+					for (constructor in constructors) {
+						var moduleName = trueEnum.module.substring(trueEnum.module.lastIndexOf(".") + 1);
+						var pack = trueEnum.pack.copy();
+						if (moduleName != trueEnum.name) {
+							pack.push(moduleName);
+						}
+						pack.push(trueEnum.name);
+						pack.push(constructor.name);
+						decls.push(macro {value: $p{pack}, label: $v{camelToSpaceCase(constructor.name)}});
+					}
+				default:
+					return macro {};
+			}
+			return macro if ($targetSelect.entries == null) $targetSelect.setEntries(cast $a{decls});
 		}
-		return macro if ($targetSelect.entries == null) $targetSelect.setEntries(cast $a{decls});
+
+		return rec(enumType);
 	}
 }

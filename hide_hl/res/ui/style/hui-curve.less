@@ -1,0 +1,100 @@
+hui-key-popup {
+	padding: 5;
+
+	background-type: hui;
+	>hui-background {
+		outline: 1 @popup-border;
+	}
+
+	.horizontal {
+		width: 40px;
+		margin: 2px;
+	}
+
+	.vertical {
+		margin: 2px;
+	}
+
+	hui-text {
+		valign:middle;
+	}
+
+	.label {
+		text-align: right;
+		margin-right: 5px;
+		color: darken(@text-color, 20%);
+	}
+
+	.value {
+		width: 80;
+	}
+}
+
+hui-curve-box {
+	fill-width: true;
+	auto-size: 1;
+	height: @widget-base-height;
+
+	background-type: hui;
+	> hui-background {
+		background: @widget-bg;
+		border-radius: @base-corner-radius;
+		outline: 1 @widget-border;
+	}
+
+	&:hover {
+		> hui-background {
+			background: lighten(@widget-bg, @light-hover);
+		}
+	}
+}
+
+hui-curve-editor {
+	height: 400px;
+	width: 700px;
+	layout: stack;
+	overflow: hidden;
+
+	background-type: hui;
+	> hui-background {
+		background: @widget-bg;
+		border-radius: @base-corner-radius;
+		outline: 1 @widget-border;
+	}
+
+	hui-text {
+		position: absolute;
+	}
+
+	hui-icon {
+		position: absolute;
+		width: 20;
+		height: 20;
+	}
+
+	.selection-rectangle {
+		position: absolute;
+		background-type: hui;
+		> hui-background {
+			background: rgb(201, 201, 201);
+			alpha: 0.2;
+		}
+
+		&:hover {
+			cursor: ew-resize;
+		}
+	}
+
+	.selection-bounds {
+		position: absolute;
+		background-type: hui;
+		> hui-background {
+			background: rgb(112, 140, 190);
+			alpha: 0.2;
+		}
+
+		&:hover {
+			cursor: ew-resize;
+		}
+	}
+}

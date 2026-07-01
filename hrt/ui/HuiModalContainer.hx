@@ -11,12 +11,20 @@ class HuiModalContainer extends HuiElement {
 		<hui-modal-container>
 		</hui-modal-container>
 
-	public function new(?parent: h2d.Object) {
+	public function new(isModal: Bool, ?parent: h2d.Object) {
 		super(parent);
 		initComponent();
 
 		makeInteractive();
-		interactive.propagateEvents = true;
+		interactive.propagateEvents = false;
+		if (isModal) {
+			dom.addClass("modal");
+		}
+		interactive.cursor = null;
+	}
+
+	public function setPropagateEvents(value: Bool) {
+		interactive.propagateEvents = value;
 	}
 }
 

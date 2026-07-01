@@ -10,6 +10,10 @@ class App extends hxd.App {
 	static public var DEBUG = false;
 	static public var fs : hxd.fs.EmbedFileSystem;
 
+	var fpsGraph : hrt.tools.FpsGraph;
+	public var lastUpdateTime: Float = 0.0;
+	var currentUpdateTime: Float = 0.0;
+
 	override public function init() {
 		super.init();
 
@@ -26,9 +30,18 @@ class App extends hxd.App {
 
 		var winSize = ide.getLocalStorage("windowSize") ?? {w: 800, h: 600};
 		// hxd.Window.getInstance().resize(winSize.w, winSize.h);
+
+		hxd.Window.getInstance().setIcon(hrt.ui.HuiRes.ui.icons.hide_icon.toBitmap());
+
 		#if hldx
 		@:privateAccess hxd.Window.getInstance().window.maximize();
+		@:privateAccess hxd.Window.getInstance().window.setDarkMode(true);
 		#end
+
+		hxd.Window.getInstance().onClose = () -> {
+			ui.confirm("Really close", (yes) -> if (yes == Ok) {hxd.Window.getInstance().close();});
+			return false;
+		};
 	}
 
 	override function onResize() {
@@ -42,28 +55,55 @@ class App extends hxd.App {
 	}
 
 	override public function update(dt: Float) {
+		currentUpdateTime = haxe.Timer.stamp();
+		fpsGraph?.begin();
 		super.update(dt);
 
 		ide.update(dt);
 		tryCall(() -> ui.updateStyle(dt));
 
 		updateProfiling();
+		fpsGraph?.update(dt);
+		if (fpsGraph != null) {
+			fpsGraph.setPosition(s2d.width - fpsGraph.width, s2d.height - fpsGraph.height);
+		}
+	}
+
+	override public function render(ctx) {
+		super.render(ctx);
+		fpsGraph?.end();
+		lastUpdateTime = haxe.Timer.stamp() - currentUpdateTime;
 	}
 
 	function updateProfiling() {
 		if (hxd.Key.isPressed(hxd.Key.F9)) {
-			if (!hide.tools.Profiler.processing) {
-				Ide.showInfo("Starting profiler");
-				hide.tools.Profiler.start();
-			} else {
-				hide.tools.Profiler.save();
-				var converted = Sys.command(".vscode\\post_profile.bat") == 0;
-				hide.tools.Profiler.stop();
-				Ide.showInfo("Stopping profiler");
-			}
+			toggleProfiler();
+		}
+		if (hxd.Key.isPressed(hxd.Key.F10)) {
+			toggleFPSGraph();
 		}
 	}
 
+	public function toggleProfiler() {
+		if (!hide.tools.Profiler.processing) {
+			Ide.showInfo("Starting profiler");
+			hide.tools.Profiler.start();
+		} else {
+			hide.tools.Profiler.save();
+			var converted = Sys.command(".vscode\\post_profile.bat") == 0;
+			hide.tools.Profiler.stop();
+			Ide.showInfo("Stopping profiler");
+		}
+	}
+
+	public function toggleFPSGraph() {
+		if (fpsGraph == null) {
+			fpsGraph = new hrt.tools.FpsGraph(ui);
+		} else {
+			fpsGraph.dispose();
+			fpsGraph = null;
+		}
+	}
 
 	var bench: h3d.impl.Benchmark;
 

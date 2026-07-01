@@ -1,0 +1,18 @@
+hui-gradient-box {
+	min-height: @widget-base-height;
+	min-width: 32;
+	fill-width: 1;
+
+	.button-border();
+
+	> hui-background {
+		outline: 1 @widget-border;
+		background: @widget-bg;
+		border-radius: @base-corner-radius;
+	}
+
+	>#gradient-display {
+		position: absolute;
+		smooth: true;
+	}
+}

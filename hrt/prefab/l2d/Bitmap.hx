@@ -1,5 +1,6 @@
 package hrt.prefab.l2d;
 
+@:prefabIcon(HuiRes.ui.icons.prefab.bitmap)
 class Bitmap extends Object2D {
 
 	// parameters
@@ -67,8 +68,6 @@ class Bitmap extends Object2D {
 		);
 	}
 
-	#if editor
-
 	override function makeInteractive():h2d.Interactive {
 		if(local2d == null)
 			return null;
@@ -80,6 +79,8 @@ class Bitmap extends Object2D {
 		int.y = bmp.tile.dy;
 		return int;
 	}
+
+	#if editor
 
 	override function edit( ctx : hide.prefab.EditContext ) {
 		super.edit(ctx);

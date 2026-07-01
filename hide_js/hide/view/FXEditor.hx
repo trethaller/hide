@@ -647,11 +647,11 @@ class FXEditor extends hide.view.FileView {
 		var onSetGizmoMode = function(mode: hrt.tools.Gizmo.EditMode) {
 			tools.element.find("#translationMode").get(0).toggleAttribute("checked", mode == Translation);
 			tools.element.find("#rotationMode").get(0).toggleAttribute("checked", mode == Rotation);
-			tools.element.find("#scalingMode").get(0).toggleAttribute("checked", mode == Scaling);
+			tools.element.find("#scalingMode").get(0).toggleAttribute("checked", mode == Scale);
 		};
 
 		gizmo.onChangeMode = onSetGizmoMode;
-		onSetGizmoMode(gizmo.editMode);
+		onSetGizmoMode(gizmo.mode);
 
 		statusText = new h2d.Text(hxd.res.DefaultFont.get(), scene.s2d);
 		statusText.setPosition(5, 5);
@@ -706,8 +706,7 @@ class FXEditor extends hide.view.FileView {
 
 						// We're currently supporting blending with only 2 curves
 						for (i in 0...2) {
-							var c = new Curve(null, null);
-							curve.addChild(c.parent);
+							var c = new Curve(curve, null);
 							c.name = '$i';
 							if (i == 0) {
 								for (k in curve.keys) {

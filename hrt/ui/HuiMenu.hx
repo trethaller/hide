@@ -2,7 +2,20 @@ package hrt.ui;
 
 #if hui
 
-typedef MenuItem = hide.comp.ContextMenu.MenuItem;
+typedef MenuItem = {
+    ?label: String,
+    ?isSeparator: Bool,
+    ?menu: Array<MenuItem>,
+    ?click: Void -> Void,
+    ?enabled: Bool,
+    ?stayOpen : Bool,
+    ?icon: hxd.res.Image,
+    ?keys: String,
+    ?checked: Bool,
+    ?tooltip: String,
+    ?radio: () -> Bool, // Radio button instead of checked.
+	?color: Int
+}
 
 typedef MenuOptions = {
 };
@@ -57,14 +70,32 @@ class HuiMenu extends HuiPopup {
 			onKeyDown = keyDownHandler.bind(false);
 
 			searchBar.onKeyDown = keyDownHandler.bind(true);
-			searchBar.onChange = () -> {
-				keyboardFocused = 0;
-				regenerateElements();
+			searchBar.onChange = (tmp) -> {
+				// only update on temporary changes to avoid focus issues
+				if (tmp) {
+					keyboardFocused = 0;
+					regenerateElements();
+				}
 			}
 		}
 
 		regenerateElements();
 	}
+
+	public static function itemFromCommand(command: hrt.ui.HuiCommands.HuiCommand, context: HuiElement) : MenuItem {
+		return {
+			label: command.display,
+			click: () -> context.execCommand(command),
+			keys: hrt.ui.HuiCommands.HuiCommand.shortcutToString(command.registeredShortcut),
+		};
+	}
+
+	override function onFocusLostInternal(e:hxd.Event) {
+		if (searchBar.visible == false)
+			e.cancel = true;
+		super.onFocusLostInternal(e);
+	}
+
 
 	function regenerateElements() {
 		var filteredList = items;
@@ -188,6 +219,9 @@ class HuiMenu extends HuiPopup {
 			submenu.onCloseListeners.push(() -> {
 				submenu = null;
 			});
+
+			// fix scrollbar
+			submenu.itemsContainer.scrollBar?.reflow();
 		}
 	}
 
@@ -323,6 +357,7 @@ class HuiMenuItem extends HuiElement {
 		<hui-menu-item>
 			<hui-element id="icon"></hui-element>
 			<hui-element id="content"></hui-element>
+			<hui-element id="keys"></hui-element>
 			<hui-element id="end-of-line"></hui-element>
 		</hui-menu-item>
 
@@ -350,17 +385,24 @@ class HuiMenuItem extends HuiElement {
 		icon.backgroundType = "hui";
 
 		if (item.icon != null) {
-			icon.huiBg.image = {path: item.icon, mode: Fit};
+			icon.huiBg.setTexture(item.icon.toTexture());
+			icon.huiBg.imageMode = Fit;
+		}
+
+		if (item.color != null) {
+			content.backgroundType = "hui";
+			content.huiBg.background = item.color;
 		}
 
 		if (item.label != null) {
 			var ftmText = new HuiText(nameOverride ?? item.label, content);
 		}
 
-		if (item.menu != null) {
-			endOfLine.backgroundType = "hui";
-			endOfLine.huiBg.image = {path: "ui/icons/chevronRight.png", mode: Fit};
+		if (item.keys != null) {
+			var text = new HuiText(item.keys, keys);
 		}
+
+		dom.toggleClass("has-child", item.menu != null);
 
 		interactive.propagateEvents = true;
 
@@ -382,6 +424,9 @@ class HuiMenuItem extends HuiElement {
 	}
 
 	public function validate() {
+		if (item.isSeparator == true)
+			return;
+
 		if (item.click != null)
 			item.click();
 
@@ -404,6 +449,8 @@ class HuiMenuItem extends HuiElement {
 			contextMenu.onFinalClose();
 		}
 	}
+
+
 }
 
 #end

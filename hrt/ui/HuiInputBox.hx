@@ -9,6 +9,8 @@ class HuiInputBox extends HuiElement {
 		</hui-input-box>
 
 	public var text(get, set) : String;
+	public var disabled : Bool = false;
+	var canceled = false;
 
 	function get_text() : String {
 		return textInput.text;
@@ -18,7 +20,7 @@ class HuiInputBox extends HuiElement {
 		return textInput.text = v;
 	}
 
-	function new(?parent: h2d.Object) {
+	public function new(?parent: h2d.Object) {
 		super(parent);
 		initComponent();
 
@@ -34,16 +36,47 @@ class HuiInputBox extends HuiElement {
 		textInput.onChange = onChangeInternal;
 	}
 
+	public function focus() {
+		textInput.focus();
+	}
+
 	function afterReflow() {
 		textInput.maxWidth = innerWidth;
 	}
 
-	public dynamic function onChange() {
+	override function onKeyDownInternal(e:hxd.Event) {
+		if (e.keyCode == hxd.Key.ENTER) {
+			textInput.blur();
+			e.propagate = true;
+			return;
+		}
+		if (e.keyCode == hxd.Key.ESCAPE) {
+			canceled = true;
+			textInput.blur();
+			e.propagate = true;
+			return;
+		}
+		super.onKeyDownInternal(e);
+	}
+
+	override function onFocusInternal(e: hxd.Event) {
+		canceled = false;
+		super.onFocusInternal(e);
+	}
+
+	public dynamic function onChange(isTempChange: Bool) {
 
 	}
 
+	override function onFocusLostInternal(e: hxd.Event) {
+		super.onFocusLostInternal(e);
+		if (!canceled && getScene() != null) {
+			onChange(false);
+		}
+	}
+
 	function onChangeInternal() {
-		onChange();
+		onChange(true);
 	}
 }
 #end

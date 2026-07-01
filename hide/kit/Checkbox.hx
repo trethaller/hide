@@ -6,7 +6,7 @@ class Checkbox extends Widget<Bool> {
 	#if js
 	var checkbox : js.html.InputElement;
 	#elseif hui
-	var checkbox : NativeElement;
+	var checkbox : hrt.ui.HuiCheckbox;
 	#end
 
 	function makeInput() : NativeElement {
@@ -44,6 +44,8 @@ class Checkbox extends Widget<Bool> {
 			checkbox.indeterminate = isIndeterminate();
 			checkbox.checked = value;
 		}
+		#elseif hui
+		checkbox.value = value;
 		#end
 	}
 

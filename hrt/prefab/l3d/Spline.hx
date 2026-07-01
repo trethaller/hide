@@ -94,6 +94,7 @@ class SplinePoint {
 
 @:allow(hrt.prefab.l3d.SplineMesh)
 @:allow(hrt.prefab.l3d.SplineMeshSpawner)
+@:prefabIcon(HuiRes.ui.icons.prefab.spline)
 class Spline extends hrt.prefab.Object3D {
 	static var OLD_CLASS_POINT = "splinePoint";
 
@@ -238,6 +239,9 @@ class Spline extends hrt.prefab.Object3D {
 
 		if (propName == "factorTanLengthEdition")
 			refreshHandles();
+		#else
+		if ( shared.parentPrefab != null )
+			samples = null;
 		#end
 
 
@@ -468,12 +472,28 @@ class Spline extends hrt.prefab.Object3D {
 		this.updateInstance();
 	}
 
+	var cachedAbsPos : h3d.Matrix;
+	var cachedInvAbsPos : h3d.Matrix;
+	function getCachedAbsPos( inverse : Bool = false ) {
+		#if editor
+		var m = getAbsPos(true);
+		if( inverse ) m = m.getInverse();
+		return m;
+		#else
+		if( cachedAbsPos == null ) {
+			cachedAbsPos = getAbsPos(true);
+			cachedInvAbsPos = cachedAbsPos.getInverse();
+		}
+		return inverse ? cachedInvAbsPos : cachedAbsPos;
+		#end
+	}
+
 	public function localToGlobal(point : h3d.col.Point) {
-		return point.transformed(getAbsPos(true));
+		return point.transformed(getCachedAbsPos());
 	}
 
 	public function globalToLocal(point : h3d.col.Point) {
-		return point.transformed(getAbsPos(true).getInverse());
+		return point.transformed(getCachedAbsPos(true));
 	}
 
 	public function globalToLocalSplinePoint(sp : SplinePoint) {
@@ -483,7 +503,7 @@ class Spline extends hrt.prefab.Object3D {
 		var out = new SplinePoint(sp.pos, sp.up, sp.tangentIn, sp.tangentOut);
 		out.pos = localToGlobal(out.pos);
 
-		var absInv = getAbsPos(true).getInverse();
+		var absInv = getCachedAbsPos(true);
 		out.up = out.up.transformed3x3(absInv);
 		out.up.normalize();
 		out.tangentIn = out.tangentIn.transformed3x3(absInv);
@@ -498,7 +518,7 @@ class Spline extends hrt.prefab.Object3D {
 		var out = new SplinePoint(sp.pos, sp.up, sp.tangentIn, sp.tangentOut);
 		out.pos = localToGlobal(out.pos);
 
-		var abs = getAbsPos(true);
+		var abs = getCachedAbsPos();
 		out.up = out.up.transformed3x3(abs);
 		out.up.normalize();
 		out.tangentIn = out.tangentIn.transformed3x3(abs);
@@ -544,20 +564,37 @@ class Spline extends hrt.prefab.Object3D {
 		}
 	}
 
+	static var tmpPoint = new h3d.Vector();
 	public function drawHandle(point: SplinePoint) {
-		var precision = 100;
+		var precision = 16;
 
 		function getPointOnCircle(center : h3d.Vector, radius : Float, t : Float) {
 			var angle = t * 2 * Math.PI;
 			var x = Math.sin(angle) * radius;
 			var y = Math.cos(angle) * radius;
 
-			return new h3d.Vector(center.x + x, center.y + y, center.z);
+			tmpPoint.set(center.x + x, center.y + y, center.z);
+			return tmpPoint;
 		}
 
-		function drawCircle(center : h3d.Vector, radius : Float, g : h3d.scene.Graphics) {
+		function drawCircle(center : h3d.Vector, radius : Float, g : h3d.scene.Graphics, rot: Int) {
 			for (idx in 0...precision) {
-				var pos = getPointOnCircle(center, radius, 1.0 / precision * idx);
+				var pos = getPointOnCircle(center, radius, 1.0 / (precision-1.0) * idx);
+
+				switch(rot) {
+					case 1:
+						var tmp = pos.x;
+						pos.x = pos.y;
+						pos.y = -pos.z;
+						pos.z = tmp;
+					case 2:
+						var tmp = pos.z;
+						pos.z = -pos.y;
+						pos.y = pos.x;
+						pos.x = tmp;
+					default:
+				};
+
 				if (idx == 0)
 					g.moveTo(pos.x, pos.y, pos.z);
 				else
@@ -639,8 +676,10 @@ class Spline extends hrt.prefab.Object3D {
 			g.lineTo(tPos.x, tPos.y, tPos.z);
 			g.setPosition(pos.x, pos.y, pos.z);
 
-			graphics.lineStyle(handlesThickness, pointColor);
-			drawCircle(new h3d.Vector(0,0,0), 0.2, graphics);
+			graphics.lineStyle(1, pointColor);
+			drawCircle(new h3d.Vector(0,0,0), 0.5, graphics, 0);
+			drawCircle(new h3d.Vector(0,0,0), 0.5, graphics, 1);
+			drawCircle(new h3d.Vector(0,0,0), 0.5, graphics, 2);
 
 			var abs = pos + tPos;
 			graphics.setPosition(abs.x, abs.y, abs.z);
@@ -852,6 +891,39 @@ class Spline extends hrt.prefab.Object3D {
 		return p1.sub(p0).scaled(3 * (1 - t) * (1 - t)).add(p2.sub(p1).scaled(6 * (1 - t) * t)).add(p3.sub(p2).scaled(3 * t * t)).normalized();
 	}
 
+	override function makeInteractive() : hxd.SceneEvents.Interactive {
+		if(local3d == null)
+			return null;
+
+		var lineWidth = 1;
+		var colliders : Array<h3d.col.Collider> = [];
+		if (samples != null) {
+			for (sIdx in 1...samples.length) {
+				var col = new h3d.col.Bounds();
+				var s0 = samples[sIdx - 1];
+				col.addPoint(new h3d.col.Point(s0.pos.x - lineWidth, s0.pos.y, s0.pos.z));
+				col.addPoint(new h3d.col.Point(s0.pos.x + lineWidth, s0.pos.y, s0.pos.z));
+				col.addPoint(new h3d.col.Point(s0.pos.x, s0.pos.y - lineWidth, s0.pos.z));
+				col.addPoint(new h3d.col.Point(s0.pos.x, s0.pos.y + lineWidth, s0.pos.z));
+
+				var s1 = samples[sIdx];
+				col.addPoint(new h3d.col.Point(s1.pos.x - lineWidth, s1.pos.y, s1.pos.z));
+				col.addPoint(new h3d.col.Point(s1.pos.x + lineWidth, s1.pos.y, s1.pos.z));
+				col.addPoint(new h3d.col.Point(s1.pos.x, s1.pos.y - lineWidth, s1.pos.z));
+				col.addPoint(new h3d.col.Point(s1.pos.x, s1.pos.y + lineWidth, s1.pos.z));
+				colliders.push(col);
+			}
+		}
+
+		var col = new h3d.col.Collider.GroupCollider(colliders);
+
+		var int = new h3d.scene.Interactive(col, local3d);
+		int.ignoreParentTransform = true;
+		int.preciseShape = col;
+		int.propagateEvents = true;
+		int.enableRightButton = true;
+		return int;
+	}
 
 	#if editor
 	override function edit(ctx : hide.prefab.EditContext) {
@@ -1038,40 +1110,6 @@ class Spline extends hrt.prefab.Object3D {
 
 	override function getHideProps() : hide.prefab.HideProps {
 		return { icon : "arrows-v", name : "Spline" };
-	}
-
-	override function makeInteractive() : hxd.SceneEvents.Interactive {
-		if(local3d == null)
-			return null;
-
-		var lineWidth = 1;
-		var colliders : Array<h3d.col.Collider> = [];
-		if (samples != null) {
-			for (sIdx in 1...samples.length) {
-				var col = new h3d.col.Bounds();
-				var s0 = samples[sIdx - 1];
-				col.addPoint(new h3d.col.Point(s0.pos.x - lineWidth, s0.pos.y, s0.pos.z));
-				col.addPoint(new h3d.col.Point(s0.pos.x + lineWidth, s0.pos.y, s0.pos.z));
-				col.addPoint(new h3d.col.Point(s0.pos.x, s0.pos.y - lineWidth, s0.pos.z));
-				col.addPoint(new h3d.col.Point(s0.pos.x, s0.pos.y + lineWidth, s0.pos.z));
-
-				var s1 = samples[sIdx];
-				col.addPoint(new h3d.col.Point(s1.pos.x - lineWidth, s1.pos.y, s1.pos.z));
-				col.addPoint(new h3d.col.Point(s1.pos.x + lineWidth, s1.pos.y, s1.pos.z));
-				col.addPoint(new h3d.col.Point(s1.pos.x, s1.pos.y - lineWidth, s1.pos.z));
-				col.addPoint(new h3d.col.Point(s1.pos.x, s1.pos.y + lineWidth, s1.pos.z));
-				colliders.push(col);
-			}
-		}
-
-		var col = new h3d.col.Collider.GroupCollider(colliders);
-
-		var int = new h3d.scene.Interactive(col, local3d);
-		int.ignoreParentTransform = true;
-		int.preciseShape = col;
-		int.propagateEvents = true;
-		int.enableRightButton = true;
-		return int;
 	}
 
 	override function setSelected(b: Bool) : Bool {

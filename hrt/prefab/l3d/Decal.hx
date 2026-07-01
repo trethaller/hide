@@ -7,6 +7,7 @@ enum abstract DecalMode(String) {
 	var Terrain;
 }
 
+@:prefabIcon(HuiRes.ui.icons.prefab.decal)
 class Decal extends Object3D {
 
 	@:s var albedoMap : String;
@@ -30,9 +31,7 @@ class Decal extends Object3D {
 	@:s var normalFadeEnd : Float = 1;
 	@:s var refMatLib : String;
 
-	#if editor
 	var editorIcon2 : hrt.impl.EditorTools.EditorIcon;
-	#end
 
 	override function save() : Dynamic {
 		var obj : Dynamic = super.save();
@@ -89,7 +88,6 @@ class Decal extends Object3D {
 		return mesh;
 	}
 
-	#if editor
 	override function makeInteractive():hxd.SceneEvents.Interactive {
 		if (editorIcon2 != null) {
 			var int = new h3d.scene.Interactive(editorIcon2.getCollider(), editorIcon2);
@@ -101,6 +99,8 @@ class Decal extends Object3D {
 			return super.makeInteractive();
 		}
 	}
+
+	#if editor
 
 	function makeEditorIcon(parentObject: h3d.scene.Object) {
 		var offsetter = new h3d.scene.Object(parentObject);
@@ -216,6 +216,57 @@ class Decal extends Object3D {
 	override function updateInstance(?propName : String ) {
 		super.updateInstance(propName);
 		updateRenderParams();
+	}
+
+	override function edit2(ctx:hrt.prefab.EditContext2) {
+		super.edit2(ctx);
+
+		var layers : Array<{ name : String, value : Int }> = #if editor hide.Ide.inst.currentConfig.get("material.drawOrder", []); #else []; #end
+		ctx.build(
+			<root>
+				<category("Material Library")>
+					<matlib(this.getAbsPath()) label="Mat Lib" field={refMatLib}/>
+				</category>
+				<category("Decal")>
+					<select id="render-mode-select" field={renderMode}/>
+					<select field={blendMode}/>
+					<select([for (l in layers) { label: l.name, value: l.value }]) field={drawOrder}/>
+				</category>
+				<category("PBR Parameters") if (renderMode == Default || renderMode == Terrain)>
+					<file type="texture" field={albedoMap}/>
+					<range(0, 1) field={albedoStrength}/>
+					<file type="texture" field={normalMap}/>
+					<range(0, 1) field={normalStrength}/>
+					<file type="texture" field={pbrMap}/>
+					<range(0, 1) field={pbrStrength}/>
+					<range(0, 10) field={emissive}/>
+					<range(0, 1) field={emissiveStrength}/>
+					<checkbox field={centered}/>
+				</category>
+				<category("Overlay Parameters") if (renderMode == BeforeTonemapping || renderMode == AfterTonemapping)>
+					<file type="texture" field={albedoMap}/>
+					<range(0, 10) field={emissive}/>
+					<checkbox field={autoAlpha}/>
+					<checkbox field={centered}/>
+				</category>
+				<category("Fade")>
+					<range(0, 3) field={fadePower}/>
+					<range(0, 1) field={fadeStart}/>
+					<range(0, 1) field={fadeEnd}/>
+					<checkbox field={normalFade}/>
+					<range(0, 1) field={normalFadeStart}/>
+					<range(0, 1) field={normalFadeEnd}/>
+				</category>
+			</root>
+		);
+
+		renderModeSelect.onValueChange = (_) -> {
+			#if editor
+			clearSelection();
+			#end
+			ctx.rebuildPrefab(this);
+			ctx.rebuildInspector();
+		}
 	}
 
 	#if editor

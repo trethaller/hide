@@ -5,6 +5,8 @@ package hide.kit;
 class Gradient extends Widget<hrt.impl.Gradient.GradientData> {
 	#if js
 	var gradientBox: hide.comp.GradientEditor.GradientBox;
+	#elseif hui
+	var gradientBox: hrt.ui.HuiGradientBox;
 	#end
 
 	function makeInput() : NativeElement {
@@ -16,12 +18,40 @@ class Gradient extends Widget<hrt.impl.Gradient.GradientData> {
 		}
 
 		return gradientBox.element[0];
+		#elseif hui
+		gradientBox = new hrt.ui.HuiGradientBox();
+		gradientBox.onValueChanged = (isTemp) -> {
+			//var oldData = haxe.Json.parse(haxe.Json.stringify(value));
+			value = gradientBox.value;
+			broadcastValueChange(isTemp);
+			//var newData = haxe.Json.parse(haxe.Json.stringify(value));
+
+			// custom undo redo for gradient
+
+			// parent?.change({
+			// 	callback: changeBehaviorInternal.bind(isTemp),
+			// 	isTemporaryEdit: isTemp, recordUndo: false
+			// });
+
+			// if (!isTemp) {
+			// 	root.editor.recordUndo((isUndo) -> {
+			// 		value = isUndo ? oldData : newData;
+			// 		gradientBox.value = value;
+
+			// 		parent?.change({
+			// 			callback: changeBehaviorInternal.bind(isTemp),
+			// 			isTemporaryEdit: false, recordUndo: false, widget: this,
+			// 		});
+			// 	});
+			// }
+		}
+		return gradientBox;
 		#end
 		return null;
 	}
 
 	override function syncValueUI() {
-		#if js
+		#if (js || hui)
 		if (gradientBox != null)
 			gradientBox.value = value ?? getDefaultFallback();
 		#end

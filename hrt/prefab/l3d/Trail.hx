@@ -1,5 +1,9 @@
 package hrt.prefab.l3d;
 
+/**
+	Use Trails instead of this class
+**/
+@:prefabHideInAddMenu
 class Trail extends Object3D {
 
 	@:s var data : Dynamic;

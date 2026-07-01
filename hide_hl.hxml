@@ -13,9 +13,15 @@
 -D hui
 -D dx12
 -D hl-profile
+
+-D editor_hl
+# -D prefab_ignore_get_editor_props
+
+-D cdb_datafiles
 -cp hide_hl
 -hl bin_hl/hide.hl
 -lib hldx
+#-lib hlsdl
 -xml hide_hl/api.xml
 -main hide.App
 --macro hide.HlMacros.init()
@@ -38,4 +44,6 @@
 --macro include("hrt.ui")
 -dce no
 -debug
--D resourcesPath=hide_hl/res
+
+# hack so hxd.Res doesn't create conflicting packages when building hrt.ui.HuiRes
+-D resourcesPath=hide_hl/emptyres

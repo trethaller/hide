@@ -345,8 +345,8 @@ class FileBrowser extends hide.ui.View<FileBrowserState> {
 	}
 
 	public function refreshVCS() {
-		fancyTree.queueRefresh(RegenHeader);
-		fancyGallery.queueRefresh(RegenHeader);
+		fancyTree.queueRefresh();
+		fancyGallery.queueRefresh();
 	}
 
 	function getIcon(item : FileEntry) : String {
@@ -1226,7 +1226,7 @@ class FileBrowser extends hide.ui.View<FileBrowserState> {
 
 			options.push({
 				label : "Open in Explorer",
-				click : () -> Ide.showFileInExplorer(item.getPath())
+				click : () -> hide.tools.IdeData.showFileInExplorer(item.getPath())
 			});
 
 			if (isGallery) {
@@ -1290,6 +1290,21 @@ class FileBrowser extends hide.ui.View<FileBrowserState> {
 					}
 				});
 			}});
+
+			if (StringTools.endsWith(item.path, ".shgraph")) {
+				options.push({ label: "Convert Shadergraph to HXSL", click: () -> {
+					var name = item.name.split(".").shift();
+					ide.chooseFileOptions((paths: Array<String>) -> {
+						if (paths.length > 0) {
+							hrt.shgraph.ShaderGraph.convertToHXSL(item.path, paths[0]);
+						}
+					}, {
+						saveAs: '$name.hx',
+						isAbsolute: true,
+						allowNull: false,
+					});
+				}});
+			}
 		}
 
 		if (!this.favorites.contains(item.getPath())) {

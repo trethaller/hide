@@ -23,7 +23,6 @@ class Ide extends hide.tools.IdeData {
 	public var isWindows(get, never) : Bool;
 	public var isFocused(get, never) : Bool;
 
-	public var shaderLoader : hide.tools.ShaderLoader;
 	public var isCDB = false;
 	public var isDebugger = false;
 
@@ -303,6 +302,8 @@ class Ide extends hide.tools.IdeData {
 
 		hrt.impl.EditorTools.setupIconCategories();
 
+		untyped chrome.settingsPrivate.setPref('spellcheck.dictionaries', ["en-US","fr-FR"], "null", ()->{});
+
 		refreshFont();
 	}
 
@@ -543,6 +544,14 @@ class Ide extends hide.tools.IdeData {
 
 		layout.init();
 		layout.on('stateChanged', onLayoutChanged);
+
+		// remove dangling RefViewers
+		for (v in views) {
+			if (v.state.componentName == "hide.view.RefViewer") {
+				v.close();
+			}
+		}
+
 
 		getOrInitTarget(Center);
 
@@ -787,7 +796,6 @@ class Ide extends hide.tools.IdeData {
 	function loadProject() {
 		var dir = ideConfig.currentProject;
 		setProgress();
-		shaderLoader = new hide.tools.ShaderLoader();
 		hxsl.Cache.clear();
 
 		var localDir = sys.FileSystem.exists(resourceDir) ? resourceDir : projectDir;
@@ -1136,37 +1144,37 @@ class Ide extends hide.tools.IdeData {
 										});
 
 									case "cdb":
-										var hits : Array<{sheet: cdb.Sheet, path: hide.comp.cdb.Editor.Path}> = [];
+										var hits : Array<{sheet: cdb.Sheet, path: hrt.tools.CdbUtils.Path}> = [];
 										for( rootSheet in database.sheets ) {
 											// Don't search through datafiles since we already searched them before with prefabs
 											if (rootSheet.props.dataFiles != null && rootSheet.lines == null)
 												continue;
 
-											function rec(sheet : cdb.Sheet, objs : Array<Dynamic>, path : hide.comp.cdb.Editor.Path, depth : Int) {
+											function rec(sheet : cdb.Sheet, objs : Array<Dynamic>, path : hrt.tools.CdbUtils.Path, depth : Int) {
 												for (idx => obj in objs) {
 													for (c in sheet.columns) {
 														if (Reflect.field(obj, c.name) == text) {
-															var newPath = new hide.comp.cdb.Editor.Path();
+															var newPath = new hrt.tools.CdbUtils.Path();
 															for (p in path)
 																newPath.push(p);
-															newPath.push(hide.comp.cdb.Editor.PathPart.Prop(c.name));
+															newPath.push(hrt.tools.CdbUtils.PathPart.Prop(c.name));
 															hits.push({ sheet: rootSheet, path: newPath });
 														}
 
 														var sub = sheet.getSub(c);
 														var subObjs: Array<Dynamic> = c.type.match(cdb.Data.ColumnType.TProperties | cdb.Data.ColumnType.TPolymorph) ? [Reflect.field(obj, c.name)] : Reflect.field(obj, c.name);
 														if (sub != null && subObjs != null) {
-															var newPath = new hide.comp.cdb.Editor.Path();
+															var newPath = new hrt.tools.CdbUtils.Path();
 															for (p in path)
 																newPath.push(p);
-															newPath.push(hide.comp.cdb.Editor.PathPart.Line(idx, c.name));
+															newPath.push(hrt.tools.CdbUtils.PathPart.Line(idx, c.name));
 															rec(sub, subObjs, newPath, depth+1);
 														}
 													}
 												}
 											}
 
-											var path = new hide.comp.cdb.Editor.Path();
+											var path = new hrt.tools.CdbUtils.Path();
 											rec(rootSheet, rootSheet.lines, path, 0);
 										}
 
@@ -1174,7 +1182,7 @@ class Ide extends hide.tools.IdeData {
 										hide.comp.cdb.Editor.openReference2(hits[idx].sheet, hits[idx].path);
 
 									default:
-										Ide.showFileInExplorer(absPath + "/" + f);
+										hide.tools.IdeData.showFileInExplorer(absPath + "/" + f);
 								}
 							}});
 						}
@@ -1279,7 +1287,7 @@ class Ide extends hide.tools.IdeData {
 			var currentPath : String = null;
 			context.getRef = () -> {
 				var p = currentPath;
-				return {str: p, goto : Ide.showFileInExplorer.bind(getPath(p))};
+				return {str: p, goto : hide.tools.IdeData.showFileInExplorer.bind(getPath(p))};
 			}
 
 			filterProps(function(content:Dynamic, path: String) {
@@ -1392,8 +1400,6 @@ class Ide extends hide.tools.IdeData {
 			var ext = path.split(".").pop();
 			if( exts.indexOf(ext) < 0 ) return;
 			try {
-				if (path == "assets/Enviro_Props/Props/materials.props")
-					trace("break");
 				var content = parseJSON(sys.io.File.getContent(getPath(path)));
 				var changed = callb(content, path);
 				if( !changed ) return;
@@ -1759,22 +1765,6 @@ class Ide extends hide.tools.IdeData {
 				filebrowser.onDisplay();
 			filebrowser.activate();
 			filebrowser.reveal(path);
-		}
-	}
-
-	public static function showFileInExplorer(path : String) {
-		if(!haxe.io.Path.isAbsolute(path)) {
-			path = Ide.inst.getPath(path);
-		}
-
-		switch(Sys.systemName()) {
-			case "Windows": {
-				var cmd = "explorer.exe /select," + '"' + StringTools.replace(path, "/", "\\") + '"';
-				trace("OpenInExplorer: " + cmd);
-				Sys.command(cmd);
-			};
-			case "Mac":	Sys.command("open " + haxe.io.Path.directory(path));
-			default: throw "Exploration not implemented on this platform";
 		}
 	}
 

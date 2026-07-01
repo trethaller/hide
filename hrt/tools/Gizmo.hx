@@ -1,547 +1,488 @@
 package hrt.tools;
-import h3d.scene.Object;
 import hxd.Math;
 import hxd.Key as K;
 
-typedef AxesOptions = {
-	?x: Bool,
-	?y: Bool,
-	?z: Bool
-}
-
 enum EditMode {
+	Full;
 	Translation;
 	Rotation;
-	Scaling;
-}
-
-enum TransformMode {
-	MoveX;
-	MoveY;
-	MoveZ;
-	MoveXY;
-	MoveYZ;
-	MoveZX;
-	RotateX;
-	RotateY;
-	RotateZ;
 	Scale;
 }
 
-class ChangingStepViewer extends h3d.scene.Object {
-	var textObject : h2d.ObjectFollower;
-	var lifeTime : Float = 1.3;
-	var life : Float = 0.;
-	var text : h2d.Text;
+enum Handle {
+	XArrow;
+	YArrow;
+	ZArrow;
+	XRing;
+	YRing;
+	ZRing;
+	XYPlane;
+	XZPlane;
+	YZPlane;
+	Center;
+}
 
-	public function new( parentGizmo : Gizmo, stepText : String ) {
-		super(parentGizmo);
-		name = "ChangingStepViewer";
-		textObject = new h2d.ObjectFollower(parentGizmo, @:privateAccess parentGizmo.root2d);
+class RotateAxisShader extends hxsl.Shader {
+	static var SRC = {
+		@global var camera : {
+			@var var dir : Vec3;
+		};
+		@global var global : {
+			@perObject var modelView : Mat4;
+		};
 
-		text = new h2d.Text(hxd.res.DefaultFont.get(), textObject);
-		text.textAlign = Center;
-		text.dropShadow = { dx : 0.5, dy : 0.5, color : 0x202020, alpha : 1.0 };
-		text.setScale(2);
-		text.setPosition(text.x + 100, text.y);
-		text.text = stepText;
-	}
+		var transformedPosition : Vec3;
+		var modelView : Mat4;
+		var pixelColor : Vec4;
 
-	override function sync( ctx : h3d.scene.RenderContext ) {
-		var dt = hxd.Timer.tmod * 1. / 60;
-		life += dt;
-		textObject.alpha = 1-life/lifeTime;
-		text.y -= 20*dt*life/lifeTime;
-		if (life >= lifeTime) {
-			textObject.remove();
-			remove();
+		function fragment() {
+			var center = vec3(global.modelView[0].w, global.modelView[1].w, global.modelView[2].w);
+			var camDir = camera.dir * -1;
+			var dot = dot(camDir, (center - transformedPosition).normalize());
+			pixelColor.a = ceil(clamp(dot, -0.15, 1) + 0.15);
 		}
-		super.sync(ctx);
+	}
+}
+
+class RotateSphereShader extends hxsl.Shader {
+	static var SRC = {
+		@global var camera : {
+			@var var dir : Vec3;
+		};
+		@global var global : {
+			@perObject var modelView : Mat4;
+		};
+
+		var transformedPosition : Vec3;
+		var modelView : Mat4;
+		var pixelColor : Vec4;
+
+		function fragment() {
+			var center = vec3(global.modelView[0].w, global.modelView[1].w, global.modelView[2].w);
+			var camDir = camera.dir * -1;
+			var dot = dot(camDir, (center - transformedPosition).normalize());
+			pixelColor.a = dot < 0.2 && dot > -0.2 ? 1 : 0;
+		}
 	}
 }
 
 class Gizmo extends h3d.scene.Object {
+	public static final X_COLOR = 0xfff44336;
+	public static final Y_COLOR = 0xff4dae51;
+	public static final Z_COLOR = 0xff2196f3;
+	public static final DEFAULT_COLOR = 0xFFAAAAAA;
 
-	static var GIZMO_COLORS = {
-		x : 0xff0000,
-		y : 0x00ff00,
-		z : 0x0000ff,
-		scale : 0xffffff,
-		multiAxes : 0xffff00
+	#if hui
+	static public var gizmoSwitchModeCommand = new hrt.ui.HuiCommands.HuiCommand("Gizmo Switch Mode", {key: hxd.Key.SPACE});
+	static public var gizmoTranslateCommand = new hrt.ui.HuiCommands.HuiCommand("Gizmo Translate", {key: hxd.Key.W});
+	static public var gizmoRotateCommand = new hrt.ui.HuiCommands.HuiCommand("Gizmo Rotate", {key: hxd.Key.E});
+	static public var gizmoScaleCommand = new hrt.ui.HuiCommands.HuiCommand("Gizmo Scale", {key: hxd.Key.R});
+	#end
+
+	public var mode : EditMode = Translation;
+	public var isLocalTransform(default, set) : Bool = false;
+	function set_isLocalTransform(v) {
+		if (v != isLocalTransform)
+			onChangeTransformSpace(v);
+		return isLocalTransform = v;
 	}
 
-	var gizmo: h3d.scene.Object;
-	var objects: Array<h3d.scene.Object>;
-	var deltaTextObject : h2d.ObjectFollower;
-	var root2d : h2d.Object;
-	var updateFunc: Float -> Void;
-	var mouseX(get,never) : Float;
-	var mouseY(get,never) : Float;
-	var mouseLock(get, set) : Bool;
+	public var onStartMove : Handle -> Void;
+	// offsetPosition & offsetRotation are in absolute coordinates
+	// offsetScale is in local coordinate
+	public var onMove : (offsetPosition: h3d.Vector, offsetRotation: h3d.Quat, offsetScale: h3d.Vector) -> Void;
+	public var onFinishMove : Void -> Void;
+
 	var window(get, never) : hxd.Window;
-	var xFollow : h2d.ObjectFollower;
-	var yFollow : h2d.ObjectFollower;
-	var zFollow : h2d.ObjectFollower;
-	var xLabel : h2d.Text;
-	var yLabel : h2d.Text;
-	var zLabel : h2d.Text;
-
-	public var onStartMove: TransformMode -> Void;
-	public var onMove: h3d.Vector -> h3d.Quat -> h3d.Vector -> Void;
-	public var onFinishMove: Void -> Void;
-	public var moving(default, null): Bool;
-	public var allowNegativeScale : Bool = false;
-	dynamic public function snap(v: Float, mode: EditMode) : Float {
-		return v;
-	}
-	dynamic public function shoudSnapOnGrid() : Bool {
-		return false;
-	}
-
-	public var editMode : EditMode = Translation;
-
-	var debug: h3d.scene.Graphics;
-	var axisScale = false;
-	var snapGround = false;
-	var intOverlay : h2d.Interactive;
-	var mainGizmosVisible : Bool = true;
-
-	public function new(parent:h3d.scene.Object, root2d: h2d.Object) {
-		super(parent);
-		this.root2d=root2d;
-		gizmo = loadGizmoModel();
-		addChild(gizmo);
-		debug = new h3d.scene.Graphics(this);
-
-		function setup(objname, color, mode: TransformMode) {
-			var o = gizmo.getObjectByName(objname);
-			var hit = gizmo.getObjectByName(objname + "_hit");
-			if(hit == null) {
-				hit = o;
-			}
-			else {
-				hit.visible = false;
-			}
-
-			var mat = o.getMaterials()[0];
-			mat.props = h3d.mat.MaterialSetup.current.getDefaults("ui");
-			mat.mainPass.blend(SrcAlpha, OneMinusSrcAlpha);
-			mat.mainPass.depth(false, Always);
-			mat.mainPass.setPassName("ui");
-			var mesh = hit.getMeshes()[0];
-			var interactive = new h3d.scene.Interactive(mesh.primitive.getCollider(), o);
-			interactive.priority = 100;
-			var highlight = hxd.Math.colorLerp(color, 0xffffff, 0.1);
-			color = hxd.Math.colorLerp(color, 0x000000, 0.2);
-			color = (color & 0x00ffffff) | 0x80000000;
-			mat.color.setColor(color);
-			interactive.onOver = function(e : hxd.Event) {
-				mat.color.setColor(highlight);
-				mat.color.w = 1.0;
-			}
-			interactive.onOut = function(e : hxd.Event) {
-				mat.color.setColor(color);
-
-				if (!mainGizmosVisible)
-					mat.color.w = 0;
-			}
-			interactive.onPush = function(e) {
-				var startPt = new h2d.col.Point(mouseX, mouseY);
-				updateFunc = function(dt) {
-					var mousePt = new h2d.col.Point(mouseX, mouseY);
-					if(mousePt.distance(startPt) > 5) {
-						startMove(mode);
-					}
-				}
-			}
-			interactive.onRelease = function(e) {
-				if(moving)
-					finishMove();
-				else
-					updateFunc = null;
-			}
-
-			objects.push(o);
-		}
-
-		objects = [];
-
-		setup("xAxis", GIZMO_COLORS.x, MoveX);
-		setup("yAxis", GIZMO_COLORS.y, MoveY);
-		setup("zAxis", GIZMO_COLORS.z, MoveZ);
-		setup("xy", GIZMO_COLORS.multiAxes, MoveXY);
-		setup("xz", GIZMO_COLORS.multiAxes, MoveZX);
-		setup("yz", GIZMO_COLORS.multiAxes, MoveYZ);
-		setup("xRotate", GIZMO_COLORS.x, RotateX);
-		setup("yRotate", GIZMO_COLORS.y, RotateY);
-		setup("zRotate", GIZMO_COLORS.z, RotateZ);
-		setup("scale", GIZMO_COLORS.scale, Scale);
-		setup("xScale", GIZMO_COLORS.x, MoveX);
-		setup("yScale", GIZMO_COLORS.y, MoveY);
-		setup("zScale", GIZMO_COLORS.z, MoveZ);
-
-		translationMode();
-	}
-
-	public function loadGizmoModel() : h3d.scene.Object {
-		var engine = h3d.Engine.getCurrent();
-		@:privateAccess var model : hxd.fmt.hmd.Library = engine.resCache.get(Gizmo);
-		if (model == null) {
-			model = hxd.res.Embed.getResource("hrt/tools/res/gizmo.hmd").toModel().toHmd();
-			@:privateAccess engine.resCache.set(Gizmo, model);
-		}
-		return model.makeObject();
-	}
-
-	public dynamic function onChangeMode(mode : EditMode) {}
-
-	public function translationMode() {
-		editMode = Translation;
-		axisScale = false;
-		for(n in ["xAxis", "yAxis", "zAxis", "xy", "xz", "yz"]) {
-			gizmo.getObjectByName(n).visible = true;
-		}
-		for(n in ["xRotate", "yRotate", "zRotate", "scale", "xScale", "yScale", "zScale"]) {
-			gizmo.getObjectByName(n).visible = false;
-		}
-		onChangeMode(editMode);
-	}
-
-	public function rotationMode() {
-		editMode = Rotation;
-		axisScale = false;
-		for(n in ["xRotate", "yRotate", "zRotate", ]) {
-			gizmo.getObjectByName(n).visible = true;
-		}
-		for(n in ["xAxis", "yAxis", "zAxis", "xy", "xz", "yz", "scale", "xScale", "yScale", "zScale"]) {
-			gizmo.getObjectByName(n).visible = false;
-		}
-		onChangeMode(editMode);
-	}
-
-	public function scalingMode() {
-		editMode = Scaling;
-		axisScale = true;
-		for(n in ["scale", "xScale", "yScale", "zScale"]) {
-			gizmo.getObjectByName(n).visible = true;
-		}
-		for(n in ["xAxis", "yAxis", "zAxis","xRotate", "yRotate", "zRotate", "xy", "xz", "yz"]) {
-			gizmo.getObjectByName(n).visible = false;
-		}
-		onChangeMode(editMode);
-	}
-
-	public function switchMode() {
-		switch (editMode) {
-			case Translation:
-				rotationMode();
-			case Rotation:
-				scalingMode();
-			case Scaling:
-				translationMode();
-		}
-	}
-
-	public function startMove(mode: TransformMode, ?duplicating=false) {
-		if (mode == Scale || (axisScale && (mode == MoveX || mode == MoveY || mode == MoveZ)))
-			mouseLock = true;
-		moving = true;
-		if(onStartMove != null) onStartMove(mode);
-		var startMat = getAbsPos().clone();
-		var startQuat = new h3d.Quat();
-		startQuat.initRotateMatrix(startMat);
-		var startPos = getAbsPos().getPosition().toPoint();
-		var dragPlane = null;
-		var cam = getScene().camera;
-		var norm = startPos.sub(cam.pos.toPoint());
-		intOverlay = new h2d.Interactive(40000, 40000, root2d);
-		intOverlay.onPush = function(e) finishMove();
-		switch(mode) {
-			case MoveXY: norm.set(0, 0, 1);
-			case MoveYZ: norm.set(1, 0, 0);
-			case MoveZX: norm.set(0, 1, 0);
-			case RotateX: norm.set(1, 0, 0);
-			case RotateY: norm.set(0, 1, 0);
-			case RotateZ: norm.set(0, 0, 1);
-			default:
-		}
-
-		if (mode == MoveX || mode == MoveY || mode == MoveZ || mode == Scale) {
-			var point = getScene().camera.rayFromScreen(mouseX, mouseY).getDir();
-			dragPlane = h3d.col.Plane.fromNormalPoint(point, startPos);
-		} else {
-			norm.normalize();
-			norm.transform3x3(startMat);
-			dragPlane = h3d.col.Plane.fromNormalPoint(norm, startPos);
-		}
-		var startDragPt = getDragPoint(dragPlane);
-		var cursor = new h3d.scene.Object();
-		deltaTextObject = new h2d.ObjectFollower(cursor, root2d);
-
-		var tx = new h2d.Text(hxd.res.DefaultFont.get(), deltaTextObject);
-		tx.textColor = GIZMO_COLORS.x;
-		tx.textAlign = Center;
-		tx.dropShadow = { dx : 0.5, dy : 0.5, color : 0x202020, alpha : 1.0 };
-		tx.setScale(1.2);
-		var ty = new h2d.Text(hxd.res.DefaultFont.get(), deltaTextObject);
-		ty.textColor = GIZMO_COLORS.y;
-		ty.textAlign = Center;
-		ty.dropShadow = { dx : 0.5, dy : 0.5, color : 0x202020, alpha : 1.0 };
-		ty.setScale(1.2);
-		var tz = new h2d.Text(hxd.res.DefaultFont.get(), deltaTextObject);
-		tz.textColor = GIZMO_COLORS.z;
-		tz.textAlign = Center;
-		tz.dropShadow = { dx : 0.5, dy : 0.5, color : 0x202020, alpha : 1.0 };
-		tz.setScale(1.2);
-		updateFunc = function(dt) {
-			tx.visible = false;
-			ty.visible = false;
-			tz.visible = false;
-			var curPt = getDragPoint(dragPlane);
-			tx.setPosition(mouseX + 32, mouseY - 15);
-			ty.setPosition(mouseX + 32, mouseY);
-			tz.setPosition(mouseX + 32, mouseY + 15);
-			var delta = curPt.sub(startDragPt);
-			var vec = new h3d.Vector(0,0,0);
-			var quat = new h3d.Quat();
-			var speedFactor = (K.isDown(K.SHIFT) && !K.isDown(K.CTRL)) ? 0.1 : 1.0;
-			delta.scale(speedFactor);
-			inline function scaleFunc(x: Float) {
-				return allowNegativeScale ? (x + 1) : (x > 0 ? x + 1 : 1 / (1 - x));
-			}
-
-			function moveSnap(m: Float) {
-				return m;
-				/*if(moveStep <= 0 || !scene.editor.getSnapStatus() || axisScale)
-					return m;
-
-				var step = K.isDown(K.SHIFT) ? moveStep / 2.0 : moveStep;
-				return hxd.Math.round(m / step) * step;*/
-			}
-
-			var isMove = (mode == MoveX || mode == MoveY || mode == MoveZ || mode == MoveXY || mode == MoveYZ || mode == MoveZX);
-
-			if(mode == MoveX || mode == MoveXY || mode == MoveZX) vec.x = snap(delta.dot(startMat.front().toPoint()),Translation);
-			if(mode == MoveY || mode == MoveYZ || mode == MoveXY) vec.y = snap(delta.dot(startMat.right().toPoint()),Translation);
-			if(mode == MoveZ || mode == MoveZX || mode == MoveYZ) vec.z = snap(delta.dot(startMat.up().toPoint()),Translation);
-
-			if(!axisScale) {
-				vec.transform3x3(startMat);
-				if (vec.x != 0) {
-					tx.visible = true;
-					tx.text = "X : "+ Math.round(vec.x*100)/100.;
-				}
-				if (vec.y != 0) {
-					ty.visible = true;
-					ty.text = "Y : "+ Math.round(vec.y*100)/100.;
-				}
-				if (vec.z != 0) {
-					tz.visible = true;
-					tz.text = "Z : "+ Math.round(vec.z*100)/100.;
-				}
-				x = startPos.x + vec.x;
-				y = startPos.y + vec.y;
-				z = startPos.z + vec.z;
-				if (shoudSnapOnGrid() && isMove) {
-					x = snap(x, Translation);
-					y = snap(y, Translation);
-					z = snap(z, Translation);
-				}
-			}
-
-			if(mode == Scale) {
-				var scale = snap(scaleFunc(delta.z * 0.5), Scaling);
-				vec.set(scale, scale, scale);
-			}
-
-			var doRot = false;
-			if(mode == RotateX || mode == RotateY || mode == RotateZ) {
-				doRot = true;
-				var v1 = startDragPt.sub(startPos);
-				v1.normalize();
-				var v2 = curPt.sub(startPos);
-				v2.normalize();
-
-				var angle = snap(Math.radToDeg(Math.atan2(v1.cross(v2).dot(norm), v1.dot(v2)) * speedFactor), Rotation);
-				angle = Math.degToRad(angle);
-
-				if (mode == RotateX && angle != 0) {
-					tx.visible = true;
-					tx.text = ""+ Math.round(Math.radToDeg(angle)*100)/100. + "°";
-				}
-				if (mode == RotateY && angle != 0) {
-					ty.visible = true;
-					ty.text = ""+ Math.round(Math.radToDeg(angle)*100)/100. + "°";
-				}
-				if (mode == RotateZ && angle != 0) {
-					tz.visible = true;
-					tz.text = ""+ Math.round(Math.radToDeg(angle)*100)/100. + "°";
-				}
-				quat.initRotateAxis(norm.x, norm.y, norm.z, angle);
-				var localQuat = new h3d.Quat();
-				localQuat.multiply(quat, startQuat);
-				setRotationQuat(localQuat);
-			}
-
-			if(onMove != null) {
-				if(axisScale && mode != Scale) {
-					vec.x = snap(scaleFunc(vec.x), Scaling);
-					vec.y = snap(scaleFunc(vec.y), Scaling);
-					vec.z = snap(scaleFunc(vec.z), Scaling);
-					if (vec.x != 1) {
-						tx.visible = true;
-						tx.text = ""+ Math.round(vec.x*100)/100.;
-					}
-					if (vec.y != 1) {
-						ty.visible = true;
-						ty.text = ""+ Math.round(vec.y*100)/100.;
-					}
-					if (vec.z != 1) {
-						tz.visible = true;
-						tz.text = ""+ Math.round(vec.z*100)/100.;
-					}
-					onMove(null, null, vec);
-				}
-				else {
-					if(mode == Scale) {
-						if (vec.x != 1) {
-							tx.visible = true;
-							tx.text = ""+ Math.round(vec.x*100)/100.;
-						}
-						if (vec.y != 1) {
-							ty.visible = true;
-							ty.text = ""+ Math.round(vec.y*100)/100.;
-						}
-						if (vec.z != 1) {
-							tz.visible = true;
-							tz.text = ""+ Math.round(vec.z*100)/100.;
-						}
-						onMove(null, null, vec);
-					}
-					else if (doRot) {
-						onMove(null, quat, null);
-					}
-					else {
-						onMove(vec, null, null);
-					}
-				}
-			}
-
-			if(duplicating && K.isPressed(K.MOUSE_LEFT) || K.isPressed(K.ESCAPE) || (!duplicating && !K.isDown(K.MOUSE_LEFT))) {
-				finishMove();
-			}
-		}
-	}
-
-	function get_mouseX() return @:privateAccess window.mouseX;
-	function get_mouseY() return @:privateAccess window.mouseY;
 	function get_window() return @:privateAccess getScene().window;
+	var mouseX(get,never) : Float;
+	function get_mouseX() return @:privateAccess getScene().events.mouseX;
+	var mouseY(get,never) : Float;
+	function get_mouseY() return @:privateAccess getScene().events.mouseY;
+	var mouseLock(get, set) : Bool;
 	function get_mouseLock() return @:privateAccess window.mouseMode != Absolute;
 	function set_mouseLock(v : Bool) {
 		@:privateAccess window.mouseMode = v ? AbsoluteUnbound(true) : Absolute;
 		return v;
 	}
 
-	function finishMove() {
-		deltaTextObject.remove();
+	var gizmo: h3d.scene.Object;
+	var updateFunc: Float -> Void;
+	var rotateAxisShader : RotateAxisShader = new RotateAxisShader();
+	var moving : Bool;
+	var objects : Array<h3d.scene.Object> = [];
+	var initialAbsPos : h3d.Matrix;
+	var initialRay : h3d.col.Ray;
+	var initialMousePos : h2d.col.Point;
+
+	public function new(parent: h3d.scene.Object) {
+		super(parent);
+		gizmo = loadGizmoModel();
+		addChild(gizmo);
+		translationMode();
+	}
+
+	public function update(dt : Float) {
+		var cam = this.getScene().camera;
+		var abs = gizmo.getAbsPos();
+		var gpos = abs.getPosition();
+
+		// get distance from the camera plane
+		var toCam = cam.pos.sub(gpos);
+		var camForward = cam.getForward();
+		var proj = camForward.scaled(camForward.dot(toCam));
+
+		var distToCam = proj.length();
+		if (hxd.Math.isNaN(distToCam))
+			distToCam = 1000000000.0;
+		var engine = h3d.Engine.getCurrent();
+		var ratio = 250 / engine.height;
+		var scale = ratio * distToCam * Math.tan(cam.fovY * 0.5 * Math.PI / 180.0);
+		if (cam.orthoBounds != null) {
+			scale = ratio * (cam.orthoBounds.xSize) * 0.5;
+		}
+
+		gizmo.setScale(scale);
+
+		if (updateFunc != null)
+			updateFunc(dt);
+	}
+
+
+	public function moveToObjects(objs : Array<h3d.scene.Object>) {
+		objects = objs;
+		updateTransformSpace();
+
+		// Find centroid of objects
+		var centroid = new h3d.col.Point(0, 0, 0);
+		for (o in objects) {
+			var p = o.getAbsPos().getPosition();
+			centroid.x += p.x;
+			centroid.y += p.y;
+			centroid.z += p.z;
+		}
+		centroid.x /= objects.length;
+		centroid.y /= objects.length;
+		centroid.z /= objects.length;
+
+		setPosition(centroid.x, centroid.y, centroid.z);
+	}
+
+	public function isGizmo(obj : h3d.scene.Object) {
+		return gizmo.findAll((f) -> f).contains(obj);
+	}
+
+	public function setVisible(visible : Bool) {
+		this.gizmo.visible = visible;
+	}
+
+	public function isVisible() {
+		return this.gizmo.visible;
+	}
+
+
+	public function switchMode() {
+		switch (mode) {
+			case Translation:
+				rotationMode();
+			case Rotation:
+				scalingMode();
+			case Scale:
+				translationMode();
+			case Full:
+		}
+	}
+
+	public function translationMode() {
+		for (o in gizmo.getMeshes()) {
+			if (o.name == null) continue;
+			var visible = o.name.indexOf("_Translate") >= 0
+			|| o.name.indexOf("_Branch") >= 0
+			|| o.name.indexOf("_Plane") >= 0;
+			o.visible = visible;
+		}
+
+		mode = Translation;
+		updateTransformSpace();
+		onChangeMode(mode);
+	}
+
+	public function rotationMode() {
+		for (o in gizmo.getMeshes()) {
+			var visible = o.name.indexOf("_Rotate") >= 0;
+			o.visible = visible;
+		}
+
+		mode = Rotation;
+		updateTransformSpace();
+		onChangeMode(mode);
+	}
+
+	public function scalingMode() {
+		for (o in gizmo.getMeshes()) {
+			var visible = o.name.indexOf("_Scale") >= 0
+			|| o.name.indexOf("_Branch") >= 0
+			|| o.name.indexOf("_Plane") >= 0;
+			o.visible = visible;
+		}
+		mode = Scale;
+		updateTransformSpace();
+		onChangeMode(mode);
+	}
+
+	public function updateTransformSpace() {
+		var localEuler = getGizmoLocalRotation();
+		if (isLocalTransform || mode.match(Scale))
+			setRotation(localEuler.x, localEuler.y, localEuler.z);
+		else
+			setRotation(0, 0, 0);
+	}
+
+
+	function startMove(handle: Handle, duplicating: Bool = false) {
+		if (!moving) {
+			initialAbsPos = this.getAbsPos().clone();
+			if (onStartMove != null)
+				onStartMove(handle);
+
+			initialMousePos = new h2d.col.Point(mouseX, mouseY);
+			var scene = getScene();
+			initialRay = scene.camera.rayFromScreen(mouseX, mouseY, scene.scenePosition?.width ?? -1, scene.scenePosition?.height ?? -1);
+		}
+
+		moving = true;
+	}
+
+	function move(handle: Handle) {
+		if (onMove != null) {
+			var initialPosition = initialAbsPos.getPosition();
+			var initialScale = initialAbsPos.getScale();
+			var initialRotation = new h3d.Quat();
+			initialRotation.initRotateMatrix(initialAbsPos);
+			var scene = getScene();
+			var ray = scene.camera.rayFromScreen(mouseX, mouseY, scene.scenePosition?.width ?? -1, scene.scenePosition?.height ?? -1);
+			var forward = scene.camera.getForward() * -1;
+			var dragPlane = h3d.col.Plane.fromNormalPoint(switch(handle) {
+				case XYPlane: initialAbsPos.up();
+				case XZPlane: initialAbsPos.right();
+				case YZPlane: initialAbsPos.front();
+				case XArrow:
+					forward.x = 0;
+					if (isLocalTransform || mode == Scale)
+						forward.transformed3x3(initialRotation.toMatrix());
+					forward.normalized();
+				case YArrow:
+					forward.y = 0;
+					if (isLocalTransform || mode == Scale)
+						forward.transformed3x3(initialRotation.toMatrix());
+					forward.normalized();
+				case ZArrow:
+					forward.z = 0;
+					if (isLocalTransform || mode == Scale)
+						forward.transformed3x3(initialRotation.toMatrix());
+					forward.normalized();
+				default: initialRay.getDir();
+			}, initialPosition);
+
+			var deltaPosition : h3d.col.Point = null;
+			var deltaRotation : h3d.Quat = null;
+			var deltaScale : h3d.Vector = null;
+
+			var delta = ray.intersect(dragPlane) - initialRay.intersect(dragPlane);
+			var axis = switch (handle) {
+				case XArrow, XRing:
+					initialAbsPos.front();
+				case YArrow, YRing:
+					initialAbsPos.right();
+				case ZArrow, ZRing:
+					initialAbsPos.up();
+				default:
+					null;
+			}
+
+			var speedFactor = hxd.Key.isDown(K.SHIFT) ? 0.08 : 1.0;
+			switch (mode) {
+				case Full:
+				case Translation:
+					if (axis != null)
+						delta = delta.dot(axis) * axis;
+					deltaPosition = new h3d.Vector(snap(delta.x, mode), snap(delta.y, mode), snap(delta.z, mode));
+					deltaPosition *= speedFactor;
+					setPosition(initialPosition.x + deltaPosition.x, initialPosition.y + deltaPosition.y, initialPosition.z + deltaPosition.z);
+				case Rotation:
+					var v1 = initialPosition.sub(initialRay.intersect(dragPlane)).normalized();
+					var v2 = initialPosition.sub(ray.intersect(dragPlane)).normalized();
+					var angle = snap(Math.atan2(v1.cross(v2).dot(axis), v1.dot(v2)), Rotation);
+					angle *= speedFactor;
+					deltaRotation = new h3d.Quat();
+					deltaRotation.initRotateAxis(axis.x, axis.y, axis.z, angle);
+					var localQuat = new h3d.Quat();
+					localQuat.multiply(deltaRotation, initialRotation);
+					setRotationQuat(localQuat);
+				case Scale:
+					if (handle == Center) {
+						var v = new h2d.col.Point(mouseX, mouseY) - initialMousePos;
+						v.y *= -1;
+						v.normalize();
+						var d = new h2d.col.Point(1, 1);
+						d.normalize();
+
+						var f = d.dot(v);
+						var margin = 0.4;
+						f = f < margin && f > -margin ? f / margin : f < 0 ? -1 : 1;
+
+						var s = snap((delta.length() * f * speedFactor * 0.5) + 1, mode);
+						deltaScale = new h3d.Vector(s, s, s);
+					}
+					else {
+						if (axis != null)
+							delta = delta.dot(axis) * axis;
+						delta = delta.transformed3x3(initialRotation.toMatrix().getInverse());
+						if (handle == XYPlane) {
+							var max = Math.abs(delta.x) > Math.abs(delta.y) ? delta.x : delta.y;
+							delta.x = delta.y = max;
+						}
+						if (handle == XZPlane) {
+							var max = Math.abs(delta.x) > Math.abs(delta.z) ? delta.x : delta.z;
+							delta.x = delta.z = max;
+						}
+						if (handle == YZPlane) {
+							var max = Math.abs(delta.y) > Math.abs(delta.z) ? delta.y : delta.z;
+							delta.y = delta.z = max;
+						}
+						delta *= speedFactor;
+						deltaScale = new h3d.Vector(snap((delta.x * 0.5) + 1, mode), snap((delta.y * 0.5) + 1, mode), snap((delta.z * 0.5) + 1, mode));
+					}
+			}
+
+			onMove(deltaPosition, deltaRotation, deltaScale);
+		}
+
+		if (K.isPressed(K.ESCAPE) || !K.isDown(K.MOUSE_LEFT)) {
+			finishMove(handle);
+		}
+	}
+
+	function finishMove(handle: Handle) {
 		mouseLock = false;
 		updateFunc = null;
 		if(onFinishMove != null)
 			onFinishMove();
 		posChanged = true;
 		moving = false;
-		if(intOverlay != null) {
-			intOverlay.remove();
-			intOverlay = null;
-		}
 	}
 
-	function getDragPoint(plane: h3d.col.Plane) {
-		var cam = getScene().camera;
-		var ray = cam.rayFromScreen(mouseX, mouseY);
-		return ray.intersect(plane);
-	}
 
-	public function updateLocal(dt) {
-		update(dt, true);
-	}
-
-	static var tempMatrix = new h3d.Matrix();
-	public function update(dt, isLocal:Bool) {
-		var cam = this.getScene().camera;
-		var abs = gizmo.getAbsPos();
-		var gpos = abs.getPosition();
-		var distToCam = cam.pos.sub(gpos).length();
-		if (hxd.Math.isNaN(distToCam)) {
-			distToCam = 1000000000.0;
-		}
+	function loadGizmoModel() : h3d.scene.Object {
 		var engine = h3d.Engine.getCurrent();
-		var ratio = 150 / engine.height;
-		var scale = ratio * distToCam * Math.tan(cam.fovY * 0.5 * Math.PI / 180.0);
-		if (cam.orthoBounds != null) {
-			scale = ratio *  (cam.orthoBounds.xSize) * 0.5;
+		@:privateAccess var model : hxd.fmt.hmd.Library = engine.resCache.get(Gizmo);
+		if (model == null) {
+			model = hxd.res.Embed.getResource("hrt/tools/res/gizmo.hmd").toModel().toHmd();
+			@:privateAccess engine.resCache.set(Gizmo, model);
 		}
-		gizmo.setScale(scale);
 
-		if( !moving ) {
-			var dir = cam.pos.sub(gpos).toPoint();
-			if (isLocal || this.editMode == Scaling)
-			{
-				var rot = getRotationQuat().toMatrix(tempMatrix);
-				rot.invert();
-				dir.transform3x3(rot);
+		gizmo = model.makeObject();
+
+		for (o in gizmo.getMeshes()) {
+			var axis = o.name.indexOf("_X_") >= 0 ? 0 : o.name.indexOf("_Y_") >= 0 ? 1 : o.name.indexOf("_Z_") >= 0 ? 2 : -1;
+			var isPlane = o.name.indexOf("Plane") >= 0;
+
+			var mat = o.getMaterials()[0];
+			mat.props = h3d.mat.MaterialSetup.current.getDefaults("ui");
+			mat.mainPass.blend(SrcAlpha, OneMinusSrcAlpha);
+			mat.mainPass.culling = None;
+			mat.mainPass.depth(true, Always);
+			mat.mainPass.setPassName("ui");
+			if (o.name.indexOf("Rotate") >= 0)
+				mat.mainPass.addShader(rotateAxisShader);
+			var color = (switch (axis) {
+				case 0: X_COLOR;
+				case 1: Y_COLOR;
+				case 2: Z_COLOR;
+				case _: DEFAULT_COLOR;
+			});
+			mat.color.setColor(color);
+
+			var highlight = hxd.Math.colorLerp(color, 0xffffff, 0.3);
+			var interactive = new h3d.scene.Interactive(getHandleCollider(o), o);
+			interactive.priority = o.name.indexOf("Full_Scale") >= 0 ? 101 : 100;
+			interactive.onOver = function(e : hxd.Event) {
+				e.propagate = false;
+				mat.color.setColor(highlight);
+				mat.color.w = 1.0;
 			}
-
-			var scale = 1.5 * gizmo.absPos.getScale();
-
-			gizmo.getObjectByName("xAxis").setRotation(0, 0, dir.x < 0 ? Math.PI : 0);
-			// xFollow.offsetX = dir.x < 0 ? -scale.x : scale.x;
-			// xLabel.text = dir.x < 0 ? '-X' : 'X';
-			// xFollow.offsetZ = 0.09 * scale.x; // Center the text
-
-			gizmo.getObjectByName("yAxis").setRotation(0, 0, dir.y < 0 ? Math.PI : 0);
-			// yFollow.offsetY = dir.y < 0 ? -scale.y : scale.y;
-			// yLabel.text = dir.y < 0 ? '-Y' : 'Y';
-			// yFollow.offsetZ = 0.09 * scale.y; // Center the text
-
-			gizmo.getObjectByName("zAxis").setRotation(dir.z < 0 ? Math.PI : 0, 0, 0);
-			// zFollow.offsetZ = dir.z < 0 ? -scale.z : scale.z;
-			// zFollow.offsetZ += 0.09 * scale.z; // Center the text
-			// zLabel.text = dir.z < 0 ? '-Z' : 'Z';
-
-			var zrot = dir.x < 0 ? dir.y < 0 ? Math.PI : Math.PI / 2.0 : dir.y < 0 ? -Math.PI / 2.0 : 0;
-
-			gizmo.getObjectByName("xy").setRotation(0, 0, zrot);
-			gizmo.getObjectByName("xz").setRotation(0, dir.z < 0 ? Math.PI : 0, dir.x < 0 ? Math.PI : 0);
-			gizmo.getObjectByName("yz").setRotation(dir.z < 0 ? Math.PI : 0, 0, dir.y < 0 ? Math.PI : 0);
-
-			gizmo.getObjectByName("zRotate").setRotation(0, 0, zrot);
-			gizmo.getObjectByName("yRotate").setRotation(0, dir.z < 0 ? Math.PI : 0, dir.x < 0 ? Math.PI : 0);
-			gizmo.getObjectByName("xRotate").setRotation(dir.z < 0 ? Math.PI : 0, 0, dir.y < 0 ? Math.PI : 0);
+			interactive.onOut = function(e : hxd.Event) {
+				e.propagate = false;
+				mat.color.setColor(color);
+			}
+			interactive.onPush = function(e) {
+				e.propagate = false;
+				var startPt = new h2d.col.Point(mouseX, mouseY);
+				updateFunc = function(dt) {
+					var mousePt = new h2d.col.Point(mouseX, mouseY);
+					if (mousePt.distance(startPt) > 5) {
+						var handle : Handle = null;
+						if (axis == 0)
+							handle = mode == Rotation ? XRing : isPlane ? YZPlane : XArrow;
+						else if (axis == 1)
+							handle = mode == Rotation ? YRing : isPlane ? XZPlane : YArrow;
+						else if (axis == 2)
+							handle = mode == Rotation ? ZRing : isPlane ? XYPlane : ZArrow;
+						else
+							handle = Center;
+						if (!moving)
+							startMove(handle);
+						else
+							move(handle);
+					}
+				}
+				e.propagate = false;
+			}
 		}
 
-		var labelVisible = editMode == EditMode.Translation && this.visible && !moving;
-		//xLabel.visible = yLabel.visible = zLabel.visible = labelVisible;
+		var p = new h3d.prim.Sphere(0.8, 25, 25);
+		p.addNormals();
 
-		//axisScale = K.isDown(K.ALT);
-		// for(n in ["xRotate", "yRotate", "zRotate", "xy", "xz", "yz", "scale"]) {
-		// 	gizmo.getObjectByName(n).visible = !axisScale;
-		// }
-
-		if(updateFunc != null) {
-			updateFunc(dt);
+		var m = new h3d.scene.Mesh(p, null, gizmo);
+		m.name = "Sphere_Rotate";
+		for (mat in m.getMaterials()) {
+			mat.props = h3d.mat.MaterialSetup.current.getDefaults("ui");
+			mat.mainPass.culling = None;
+			mat.mainPass.depth(true, Always);
+			mat.mainPass.addShader(new RotateSphereShader());
+			mat.mainPass.setPassName("ui");
+			mat.color = new h3d.Vector4(1, 1, 1, 1);
+			mat.blendMode = Alpha;
 		}
+
+		return gizmo;
 	}
 
-	public function toggleGizmosVisiblity(show : Bool) {
-		mainGizmosVisible = show;
+	function getHandleCollider(obj: h3d.scene.Mesh) : h3d.col.Collider {
+		if (obj.name.indexOf("_Plane") >= 0 || obj.name.indexOf("_Translate") >= 0 || obj.name.indexOf("_Scale") >= 0) {
+			var bounds = obj.primitive.getBounds();
+			var pos = bounds.getCenter();
+			var sphere = new h3d.col.Sphere(pos.x, pos.y, pos.z, (bounds.getSize().length() / 2) * 1.2);
+			return sphere;
+		}
 
-		for (o in objects)
-			o.getMaterials()[0].color.w = show ? 0.2 : 0;
-
+		return obj.primitive.getCollider();
 	}
 
-	public function isGizmo(obj : h3d.scene.Object) {
-		return gizmo.findAll((f) -> f).contains(obj);
+	function getGizmoLocalRotation() {
+		var euler = new h3d.Vector(0, 0, 0);
+		if (objects == null || objects.length <= 0)
+			return euler;
+		var invDefMat = new h3d.Matrix();
+		invDefMat.identity();
+		if (objects[objects.length - 1].defaultTransform != null)
+			invDefMat = objects[objects.length - 1].defaultTransform?.getInverse();
+		euler = invDefMat.multiplied(objects[objects.length - 1].getAbsPos()).getEulerAngles();
+		return euler;
 	}
+
+	public dynamic function snap(v: Float, mode: EditMode) : Float { return v; }
+	public dynamic function shouldSnap() : Bool { return false; }
+	public dynamic function onChangeMode(mode : EditMode) {}
+	public dynamic function onChangeTransformSpace(isLocalTransform : Bool) {}
 }

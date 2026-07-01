@@ -232,6 +232,7 @@ class Slider<T:Float> extends Widget<T> {
 		s.max = max;
 		s.defaultValue = defaultValue;
 		s.step = step;
+		s.wrap = wrap;
 		slider = s;
 		s.onValueChanged = (tempChanges : Bool) -> {
 			var oldValue = value;
@@ -264,11 +265,12 @@ class Slider<T:Float> extends Widget<T> {
 					}
 				}
 
-				parent?.change(() -> {
+				parent?.change(
+					{callback: () -> {
 					for (slider in sliders) {
 						slider.changeBehaviorInternal(tempChanges);
 					}
-				}, tempChanges);
+				}, isTemporaryEdit: tempChanges, recordUndo: !noUndo});
 			} else {
 				broadcastValueChange(tempChanges);
 			}
@@ -309,11 +311,12 @@ class Slider<T:Float> extends Widget<T> {
 				sliders.push(siblingSlider);
 			}
 
-			parent?.change(() -> {
+			parent?.change({
+				callback: () -> {
 				for (slider in sliders) {
 					slider.changeBehaviorInternal(isTemporary);
 				}
-			}, isTemporary);
+			}, isTemporaryEdit: isTemporary, recordUndo: !noUndo});
 		}
 		else {
 			value = newValue;

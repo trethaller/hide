@@ -1,10 +1,12 @@
 
+@color-gray-0: #070707;
 @color-gray-1: #131313;
 @color-gray-2: #252525;
 @color-gray-3: #2b2b2b;
 @color-gray-4: #333333;
 @color-gray-5: #373737;
 @color-gray-6: #545454;
+@color-gray-7: #727272;
 
 // From Catppuccin Mocha
 @color-red: #f38ba8;
@@ -24,26 +26,28 @@
 @widget-base-height: 16;
 @widget-bg: @color-gray-4;
 @widget-border: @color-gray-6;
+@widget-border-lighter: @color-gray-7;
 
 @base-corner-radius: 3;
 
-@bg-main-toolbar: @color-gray-5;
-@bg-main-footer: @color-gray-4;
+@bg-main-toolbar: @color-gray-2;
+@bg-main-footer: @color-gray-2;
 @bg-panel-lvl1: @color-gray-1;
 @bg-panel-lvl2: @color-gray-2;
 @bg-panel-lvl3: @color-gray-3;
 
-@tree-bg: @color-gray-3;
+@tree-bg: rgba(0,0,0,0);
 @tree-hover: @color-gray-5;
 
 
 @popup-bg: @color-gray-2;
+@popup-bg-darker: @color-gray-1;
 @popup-border: @color-gray-3;
 @popup-shadow: 0 3 3 0 rgba(0,0,0,0.5);
 
 @light-hover: 10%;
 
-@tab-bar-bg: @color-gray-1;
+@tab-bar-bg: @color-gray-0;
 @tab-tab-bg: @color-gray-2;
 @tab-tab-border: @color-gray-4;
 @tab-tab-active-bg: @color-gray-4;
@@ -51,10 +55,9 @@
 
 @text-color: @color-foreground;
 @text-disabled: @color-foreground-muted;
-@text-font: url("font/Inter-cv05-cv08-tnum-13pt.fnt");
 
 @splitter-color: @color-gray-3;
-@splitter-hover: @color-gray-4;
+@splitter-hover: rgba(127,127,127,0.3);
 
 @color-error: @color-maroon;
 @color-warning: @color-peach;
@@ -64,6 +67,16 @@
 	&hui-text, hui-text {
 		color: @text-disabled;
 	}
+
+	cursor: none;
+}
+
+.vertical {
+	layout: vertical;
+}
+
+.horizontal {
+	layout: horizontal;
 }
 
 .button() {
@@ -76,6 +89,23 @@
 	&:active {
 		> hui-background {
 			background: @color-over-lighter;
+		}
+		offset-y: 1;
+	}
+
+	cursor: button;
+}
+
+.button-border() {
+	.button();
+	> hui-background {
+		border-radius: @base-corner-radius;
+		outline: 1 @widget-border;
+	}
+
+	&:hover {
+		> hui-background {
+			outline: 1 @widget-border-lighter;
 		}
 	}
 }

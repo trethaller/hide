@@ -339,7 +339,7 @@ class Emitter2DObject extends h2d.Object {
 		}
 
 		var dt = curTime - prevTime;
-		if (dt < 0 || dt > hxd.Timer.maxDeltaTime) {
+		if ((dt < 0 || dt > hxd.Timer.maxDeltaTime) && !inCatchup) {
 			reset();
 			var targetTime = curTime;
 			prevTime = 0;
@@ -452,6 +452,8 @@ class Emitter2DObject extends h2d.Object {
 }
 
 @:access(hrt.prefab.fx.Emitter2DObject)
+@:prefabName("Emitter 2D")
+@:prefabIcon(hrt.ui.HuiRes.ui.icons.prefab.emitter2d)
 class Emitter2D extends Object2D {
 
 	public static var emitterParams : Array<hrt.prefab.fx.EmitterHelper.ParamDef> = [
@@ -488,7 +490,7 @@ class Emitter2D extends Object2D {
 		{ name: "lifeTimeRand", t: PFloat(0, 1), def: 0.0, groupName : "Particle" },
 		{ name: "spriteType", t: PEnum(SpriteType), def: SpriteType.Color, groupName : "Particle" },
 		{ name: "color", t: PVec(4), def: [0,0,0,1], groupName : "Particle" },
-		{ name: "texture", t: PTexture, def: 1.0, groupName : "Particle" },
+		{ name: "texture", t: PTexture, def: "", groupName : "Particle" },
 		{ name: "useRandomColor", t: PBool, def: false, disp: "Random Color", groupName : "Particle" },
 		{ name: "useRandomGradient", t: PBool, def: false, disp: "Random Gradient", groupName : "Particle" },
 		{ name: "randomColor1", t: PVec(4), disp: "Color 1", def : [0,0,0,1], groupName : "Particle" },

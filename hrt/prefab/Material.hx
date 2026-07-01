@@ -8,6 +8,7 @@ import h3d.mat.PbrMaterial;
 import hide.prefab.HideProps;
 #end
 
+@:prefabIcon(HuiRes.ui.icons.prefab.material)
 class Material extends Prefab {
 
 	@:s public var wrapRepeat = false;
@@ -20,8 +21,9 @@ class Material extends Prefab {
 	@:s public var refMatLib : String;
 	@:s public var overrides : Array<Dynamic> = [];
 
-	#if editor
 	var previewSphere : h3d.scene.Object;
+
+	#if editor
 	var gradientFollower : GradientFollower;
 	#end
 
@@ -278,7 +280,7 @@ class Material extends Prefab {
 			if (pname.indexOf("/") > 0) {
 
 				pname = pname.substring(pname.indexOf("/") + 1);
-				var v = o.value;
+				var v : Dynamic = o.value;
 
 				if (v == "__toremove") {
 					Reflect.deleteField(newProps, pname);
@@ -310,14 +312,13 @@ class Material extends Prefab {
 		mat.props = renderProps();
 
 
-		var editor = hide.prefab.materialEditor.MaterialEditor.makeEditor(mat);
-		editor.edit2(ctx, materialCategory);
+		var editor = hide.prefab.propsEditor.AnyPropsEditor.makeEditor(mat);
+		editor.edit2(ctx, materialCategory, null);
 
 		function rec(elements: Array<hide.kit.Element>) {
 			for (element in elements) {
 				var widget = Std.downcast(element, hide.kit.Widget);
 				if (widget != null) {
-					trace(widget.id);
 					@:privateAccess var old = widget.onFieldChange;
 					@:privateAccess widget.onFieldChange = (temp) -> {
 						old(temp);
@@ -350,6 +351,94 @@ class Material extends Prefab {
 		}
 
 		rec(@:privateAccess materialCategory.children);
+
+		var isPbr = Std.isOfType(ctx.s3d.renderer, h3d.scene.pbr.Renderer);
+
+		if (isPbr) {
+			var pbrProps : h3d.mat.PbrMaterial.PbrProps = mat.props;
+			ctx.build(
+				<category("Color Mask")>
+					<line label="Channels">
+						<bitflag(0) field={colorMask} label="R"/>
+						<bitflag(1) field={colorMask} label="G"/>
+						<bitflag(2) field={colorMask} label="B"/>
+						<bitflag(3) field={colorMask} label="A"/>
+					</line>
+				</category>,pbrProps
+			);
+
+			ctx.build(
+				<category("Stencil") field={enableStencil}>
+					<select field={stencilCompare} label="Compare"/>
+					<select field={stencilFailOp} label="Stencil Fail"/>
+					<select field={depthFailOp} label="Depth Fail"/>
+					<select field={stencilPassOp} label="Stencil Pass"/>
+
+					<line label="Read Mask">
+						<bitflag(7) field={stencilReadMask} label=""/>
+						<bitflag(6) field={stencilReadMask} label=""/>
+						<bitflag(5) field={stencilReadMask} label=""/>
+						<bitflag(4) field={stencilReadMask} label=""/>
+						<bitflag(3) field={stencilReadMask} label=""/>
+						<bitflag(2) field={stencilReadMask} label=""/>
+						<bitflag(1) field={stencilReadMask} label=""/>
+						<bitflag(0) field={stencilReadMask} label=""/>
+					</line>
+
+					<line label="Write Mask">
+						<bitflag(7) field={stencilWriteMask} label=""/>
+						<bitflag(6) field={stencilWriteMask} label=""/>
+						<bitflag(5) field={stencilWriteMask} label=""/>
+						<bitflag(4) field={stencilWriteMask} label=""/>
+						<bitflag(3) field={stencilWriteMask} label=""/>
+						<bitflag(2) field={stencilWriteMask} label=""/>
+						<bitflag(1) field={stencilWriteMask} label=""/>
+						<bitflag(0) field={stencilWriteMask} label=""/>
+					</line>
+
+					<line label="Value">
+						<bitflag(7) field={stencilValue} label=""/>
+						<bitflag(6) field={stencilValue} label=""/>
+						<bitflag(5) field={stencilValue} label=""/>
+						<bitflag(4) field={stencilValue} label=""/>
+						<bitflag(3) field={stencilValue} label=""/>
+						<bitflag(2) field={stencilValue} label=""/>
+						<bitflag(1) field={stencilValue} label=""/>
+						<bitflag(0) field={stencilValue} label=""/>
+					</line>
+				</category>
+			,pbrProps);
+		}
+
+		ctx.build(
+			<category("Overrides")>
+				<file type="texture" field={diffuseMap} label={isPbr ? "Albedo" : "Diffuse"}/>
+				<file type="texture" field={normalMap} label="Normal"/>
+				<file type="texture" field={specularMap} label="Specular"/>
+				<checkbox field={wrapRepeat} label="Wrap"/>
+				<color field={color} arr/>
+				<input field={mainPassName} label="Pass Name"/>
+			</category>,
+			this,
+			function(_) {
+			// if (this.refMatLib != null && this.refMatLib != "")
+			// 	addOverrideProperty2(pname, false);
+			var fx = findParent(hrt.prefab.fx.FX);
+			if(fx != null)
+				ctx.rebuildPrefab(fx);
+		});
+	}
+
+
+	override function makeInteractive() : hxd.SceneEvents.Interactive {
+		if (previewSphere != null) {
+			var col = new h3d.col.Sphere(0,0,0,1.);
+			var int = new h3d.scene.Interactive(col, previewSphere);
+			int.propagateEvents = true;
+			int.enableRightButton = true;
+			return int;
+		}
+		return null;
 	}
 
 	#if editor
@@ -375,17 +464,6 @@ class Material extends Prefab {
 			return Rebuild;
 		}
 		return Skip;
-	}
-
-	override function makeInteractive() : hxd.SceneEvents.Interactive {
-		if (previewSphere != null) {
-			var col = new h3d.col.Sphere(0,0,0,1.);
-			var int = new h3d.scene.Interactive(col, previewSphere);
-			int.propagateEvents = true;
-			int.enableRightButton = true;
-			return int;
-		}
-		return null;
 	}
 
 	override function edit( ctx : hide.prefab.EditContext ) {
@@ -810,20 +888,17 @@ class Material extends Prefab {
 				normalMap = f(normalMap);
 				specularMap = f(specularMap);
 
-				if (refMatLib == null)
-					refMatLib = "";
-
-				// handle just the source file of the mat lib being renamed
-				var refPath = refMatLib.substr(0,refMatLib.lastIndexOf("/"));
-				var newPath = f(refPath);
-				if (newPath != refPath) {
-					refMatLib = newPath + refMatLib.substr(refMatLib.lastIndexOf("/"));
-				} else {
-					// handle the whole path being renamed (by sceneEditor.migrateMaterialLibrary)
-					var old = refMatLib;
-					refMatLib = f(refMatLib);
-					if (old != refMatLib)
-						trace("break");
+				if (refMatLib != null) {
+					// handle just the source file of the mat lib being renamed
+					var refPath = refMatLib.substr(0,refMatLib.lastIndexOf("/"));
+					var newPath = f(refPath);
+					if (newPath != refPath) {
+						refMatLib = newPath + refMatLib.substr(refMatLib.lastIndexOf("/"));
+					} else {
+						// handle the whole path being renamed (by sceneEditor.migrateMaterialLibrary)
+						var old = refMatLib;
+						refMatLib = f(refMatLib);
+					}
 				}
 			},
 			allowChildren: function(t) return !Prefab.isOfType(t, Material),
@@ -971,6 +1046,10 @@ class Material extends Prefab {
 		return refs;
 	}
 	#end
+
+	override function editorAllowChild(cl) {
+		return !Prefab.isOfType(cl, Material);
+	}
 
 	public function addOverrideProperty2(pname : String, isMatSetupProp : Bool) {
 		// Remove previous value of this props name in overrides

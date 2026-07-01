@@ -1,18 +1,17 @@
 package hide.kit;
 
-#if domkit
+#if (domkit && cdb)
 
-#if js
 import hide.comp.cdb.DataFiles;
-#end
 
 class CDB extends Element {
-	#if js
 	var cdbCategory : Category;
 	var curType : cdb.Sheet;
 
 	override public function new(parent: Element, id: String) {
 		super(parent, id);
+
+		#if editor_hl
 		var types = DataFiles.getAvailableTypes();
 		if (types.length <= 0)
 			return;
@@ -52,20 +51,21 @@ class CDB extends Element {
 			} else {
 				if (prefab.shared.currentPath.length == 0)
 					throw "hurgh";
-				prefab.props = hide.view.Prefab.makeCdbProps(prefab, prefab.shared.currentPath, DataFiles.resolveType(typeId));
+				prefab.props = hrt.prefab.Prefab.makeCdbProps(prefab, prefab.shared.currentPath, DataFiles.resolveType(typeId));
 			}
 			root.editor.rebuildInspector();
 		}
+		#end
 		#end
 	}
 
 	override function make(attach: Bool = true) {
 		super.make();
 
-		#if js
 		if (curType != null) {
 			var prefab = @:privateAccess root.prefab;
 
+			#if js
 			var detachable = new hide.comp.DetachablePanel();
 			detachable.saveDisplayKey = "detachedCdb";
 
@@ -78,7 +78,6 @@ class CDB extends Element {
 
 			//group.toggleClass("cdb-large", cdbLarge == true);
 			detachable.setDetached(detached);
-
 
 			var editor = new hide.comp.cdb.ObjEditor(curType, ctx.editor.view.config, prefab.props, fileRef, detachable.element);
 			editor.onScriptCtrlS = function() {
@@ -94,14 +93,13 @@ class CDB extends Element {
 					obj3d.addEditorUI();
 				}
 			}
+			#elseif hui
+			new hrt.ui.HuiCdbInspector(curType, prefab.props, cdbCategory.nativeContent);
+			#end
 		}
-		#end
-
 	}
 
 	override function addEditMenu(e: NativeElement) {
 	}
-	#end
 }
-
 #end

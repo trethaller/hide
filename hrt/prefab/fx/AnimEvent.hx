@@ -47,6 +47,27 @@ class AnimEvent extends hrt.prefab.fx.Event {
 		}
 	}
 
+	override function edit2(ctx:hrt.prefab.EditContext2) {
+		super.edit2(ctx);
+
+		ctx.build(
+			<category("Event")>
+				<checkbox field={loop}/>
+				<select id="anim-select" field={animation}/>
+				<slider field={speed}/>
+				<slider field={offset}/>
+			</category>
+		);
+
+		if (parent.source != null) {
+			#if editor
+			var anims = try shared.scene.listAnims(parent.source) catch(e: Dynamic) [];
+			animSelect.setEntries([ for (a in anims) { label: shared.scene.animationName(a), value: hide.Ide.inst.makeRelative(a) } ]);
+			animSelect.value = animation;
+			#end
+		}
+	}
+
 	#if editor
 	override function edit( ctx : hide.prefab.EditContext ) {
 		super.edit(ctx);
@@ -109,6 +130,10 @@ class AnimEvent extends hrt.prefab.fx.Event {
 		}
 	}
 	#end
+
+	override function editorAllowChild(cl) {
+		return false;
+	}
 
 	public override function getDuration() : Float {
 		return duration > 0.0 ? duration : (animTemplate != null ? animTemplate.getDuration() : 0.0);
